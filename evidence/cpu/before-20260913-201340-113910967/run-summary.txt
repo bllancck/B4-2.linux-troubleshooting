@@ -1,0 +1,11 @@
+phase=before
+memory_limit=512
+cpu_max_occupy=80
+duration_seconds=40
+process_exit_code=143
+termination_signal=SIGTERM
+cpu_threshold_observed=true
+stopped_after_observation=false
+max_logged_cpu_percent=55.11
+max_top_cpu_percent=5
+termination_reason=CPU Threshold Violated

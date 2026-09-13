@@ -1,0 +1,5 @@
+phase=before
+memory_limit=256
+duration_seconds=35
+process_exit_code=137
+termination_reason=Memory limit exceeded / SELF-TERMINATED

@@ -1,0 +1,2 @@
+    PID     LWP PSR STAT %CPU %MEM COMMAND
+  15357   15357   4 SN+  11.1  0.4 agent-leak-app
