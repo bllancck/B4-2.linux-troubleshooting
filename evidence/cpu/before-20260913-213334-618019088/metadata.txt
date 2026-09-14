@@ -1,0 +1,8 @@
+collected_at=2026-09-13T21:33:34+09:00
+phase=before
+experiment=cpu
+pid=19548
+hostname=DESKTOP-TGOHI9Q
+kernel=Linux 6.6.87.2-microsoft-standard-WSL2 x86_64 GNU/Linux
+monitor_interval_seconds=1
+monitor_sample_count=60

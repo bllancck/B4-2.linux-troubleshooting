@@ -1,0 +1,7 @@
+AGENT_PORT=15034
+AGENT_UPLOAD_DIR=/home/byj/agent-leak-lab/upload_files
+AGENT_KEY_PATH=/home/byj/agent-leak-lab/api_keys
+AGENT_LOG_DIR=/home/byj/agent-leak-lab/logs
+MEMORY_LIMIT=512
+CPU_MAX_OCCUPY=49
+MULTI_THREAD_ENABLE=true
