@@ -50,6 +50,8 @@ Before 설정은 [settings.txt](../evidence/oom/before-20260913-194113-782307006
 
 내부 사용량이 `MEMORY_LIMIT=256`을 넘자 `MemoryGuard`가 시스템 불안정을 막기 위해 프로세스를 의도적으로 종료했다. 따라서 직접적인 종료 원인은 Linux OOM Killer가 아니라 애플리케이션의 메모리 보호 정책이다. 그 정책을 작동시킨 원인은 실행 중 해제되지 않고 누적된 메모리다.
 
+커널 OOM Killer가 개입했다면 커널 로그에 `Out of memory`나 `Killed process` 같은 흔적이 남지만, 이번 실험에서는 관련 기록이 없었고 WSL의 가용 메모리도 충분했다. 종료 코드 137만으로 커널 OOM을 단정할 수 없으며, 종료 직전 `MemoryGuard`가 `Self-terminating process`를 기록한 점에서 애플리케이션이 직접 종료한 것으로 판단한다.
+
 제공된 바이너리 내부 코드는 수정할 수 없으므로 메모리 할당과 해제 로직을 고치는 근본 해결은 이번 과제 범위에 포함되지 않는다.
 
 ## 4. Workaround & Verification (조치 및 검증)

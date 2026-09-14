@@ -2,35 +2,36 @@
 
 ## 프로젝트 목적
 
-제공된 `agent-leak-app`을 Linux 환경에서 실행해 OOM, CPU 과점유, Deadlock을 재현·분석하는 프로젝트입니다.
+애플리케이션 장애를 로그로 분석하고 해결하는 과정을 연습하는 프로젝트입니다.
 
-로그와 시스템 지표로 장애 원인을 규명하고, 설정 변경 전후를 비교해 조치 효과를 검증합니다. 수집한 증거와 분석 결과는 GitHub Issue 형식의 리포트로 정리했습니다.
+Linux 환경에서 `agent-leak-app`을 실행해 OOM, CPU 과점유, Deadlock을 의도적으로 재현한 뒤, 원인을 파악하고 설정값을 변경해 해결 여부를 검증합니다.
 
 ## 트러블슈팅
 
 ### 한눈에 보기
 
-| 장애 | 문제 상황 | 변경 | 결과 | 분석 결론 |
+| 장애 | 문제 상황 | 변경 | 결과 | 원인 |
 | --- | --- | --- | --- | --- |
-| [OOM](#1-oom) | Heap 증가 후 `MemoryGuard` 종료(137) | `MEMORY_LIMIT` 256 → 512 | 메모리 제한 초과 미발생 | Linux OOM Killer가 아닌 내부 보호 종료 |
-| [CPU 과점유](#2-cpu-과점유) | 내부 부하 임계치 초과 후 SIGTERM | `CPU_MAX_OCCUPY` 80 → 40 | 60초 동안 보호 종료 미발생 | 실제 CPU 포화가 아닌 내부 판정값 문제 |
-| [Deadlock](#3-deadlock) | 두 작업 스레드의 순환 대기 | `MULTI_THREAD_ENABLE` true → false | 상호 대기 해소 및 작업 완료 | 프로세스 생존보다 작업·대기 상태 확인 필요 |
+| **OOM** | [Heap](docs/concepts.md#heap)이 계속 증가해 프로그램 종료 | `MEMORY_LIMIT` `256 → 512` | 메모리 초과 종료 미발생 | 프로그램 내부 메모리 제한 초과 |
+| **CPU 과점유** | 내부 CPU 기준 초과로 프로그램 종료 | `CPU_MAX_OCCUPY` `80 → 40` | CPU 보호 종료 없이 실행 유지 | 애플리케이션 내부 CPU 기준 초과 |
+| **Deadlock** | 프로세스는 살아 있지만 스레드가 서로 기다려 작업이 멈춤 | `MULTI_THREAD_ENABLE` `true → false` | 작업을 순서대로 처리해 완료 | 두 스레드가 서로의 자원을 기다림 |
 
 <a id="1-oom"></a>
 
 ### 1. OOM
 
-#### 문제 상황
+`MEMORY_LIMIT=256`으로 테스트한 결과, `MemoryWorker`가 메모리를 계속 누적하면서 Heap과 RSS가 증가했습니다.
 
-`MEMORY_LIMIT=256`에서 RSS가 18,048KiB에서 274,048KiB까지 증가했습니다. Heap이 275MB에 도달하자 `MemoryGuard` 로그와 함께 프로세스가 종료 코드 137로 종료됐습니다.
+```text
+Heap 증가: 225MB → 250MB → 275MB
+RSS 증가:  18,048KiB → 274,048KiB
+제한 초과: 275MB >= 256MB
+결과:      MemoryGuard가 프로세스를 자체 종료(137)
+```
 
-#### 조치와 결과
+`MEMORY_LIMIT=512`로 변경한 뒤에는 메모리 제한 초과와 `MemoryGuard` 종료가 발생하지 않았습니다.
 
-`MEMORY_LIMIT`를 512MB로 높이자 메모리 제한 초과 로그와 종료가 발생하지 않았습니다.
-
-#### 분석 결론
-
-종료 원인은 Linux OOM Killer가 아니라 애플리케이션의 내부 메모리 제한이었습니다. OOM을 제거한 뒤 나타난 CPU 장애는 별도 문제로 분리해 분석했습니다.
+> **판단:** 이번 종료의 원인은 Linux OOM Killer가 아니라 `MemoryWorker`의 메모리 누적으로 내부 메모리 제한을 초과한 `MemoryGuard`였습니다.
 
 [상세 리포트](reports/01-oom-crash.md) · [증거 요약](evidence/oom/analysis-summary.md)
 
@@ -38,17 +39,16 @@
 
 ### 2. CPU 과점유
 
-#### 문제 상황
+`CPU_MAX_OCCUPY=80`에서 애플리케이션 내부 `CpuWorker` 값이 상승하다가 `CPU Threshold Violated` 로그와 SIGTERM이 발생했습니다.
 
-`CPU_MAX_OCCUPY=80`에서 내부 `CpuWorker` 값이 5.00%에서 55.11%까지 상승한 뒤 `CPU Threshold Violated` 로그와 SIGTERM이 발생했습니다. 같은 구간의 Linux `top` 최댓값은 5%였습니다.
+| 측정 대상 | 관찰 결과 |
+| --- | --- |
+| 애플리케이션 내부 값 | `5.00% → 55.11%`로 상승 후 임계치 초과 |
+| Linux `top` | 같은 구간의 최댓값 약 `5%` |
 
-#### 조치와 결과
+이 실험에서 확인하려는 핵심은 Linux의 실제 CPU 사용률 자체가 아니라, 애플리케이션이 내부 기준을 넘었다고 판단해 보호 종료하는 동작입니다. `MEMORY_LIMIT=512`를 유지하고 `CPU_MAX_OCCUPY`를 `40`으로 낮춘 After 설정에서는 CPU 임계치 초과와 보호 종료가 발생하지 않았습니다.
 
-`MEMORY_LIMIT=512`로 고정하고 `CPU_MAX_OCCUPY`를 40%로 낮추자 60초 동안 CPU 임계치가 발생하지 않았고 프로세스가 유지됐습니다.
-
-#### 분석 결론
-
-실제 Linux CPU 포화가 아니라 애플리케이션 내부 판정값에 따른 보호 종료였습니다. After의 SIGTERM은 장애가 아니라 관찰을 마친 실험 스크립트의 정리 동작입니다.
+> **판단:** `CPU_MAX_OCCUPY=80`에서는 애플리케이션 내부 CPU 기준 초과가 재현됐고, `40`으로 낮추자 해당 종료가 사라졌습니다.
 
 [상세 리포트](reports/02-cpu-latency.md) · [증거 요약](evidence/cpu/analysis-summary.md)
 
@@ -56,17 +56,18 @@
 
 ### 3. Deadlock
 
-#### 문제 상황
+`MULTI_THREAD_ENABLE=true`에서 두 작업 스레드가 자원을 하나씩 보유한 채 서로가 가진 자원을 기다렸습니다.
 
-`MULTI_THREAD_ENABLE=true`에서 두 작업 스레드가 각각 `Shared_Memory_A`와 `Socket_Pool_B`를 보유한 채 상대 자원을 기다렸습니다. 프로세스는 살아 있었지만 작업은 완료되지 않았고, 세 스레드가 모두 `futex_wait_queue`에서 대기했습니다.
+```text
+스레드 A: Shared_Memory_A 보유 → Socket_Pool_B 대기
+스레드 B: Socket_Pool_B 보유   → Shared_Memory_A 대기
+```
 
-#### 조치와 결과
+프로세스 자체는 종료되지 않았지만, 두 스레드가 계속 대기하기 때문에 작업은 완료되지 않았습니다. 실제 관제에서도 스레드들이 `futex_wait_queue`에서 대기하는 상태가 확인됐습니다.
 
-`MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`으로 고정하고 `MULTI_THREAD_ENABLE=false`로 바꾸자 상호 대기 로그가 사라지고 `[Scheduler] All tasks completed.`가 기록됐습니다.
+After에서는 `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`을 유지하고 `MULTI_THREAD_ENABLE=false`로 변경했습니다. 멀티스레드 동시 처리를 끄자 작업이 서로 자원을 기다리지 않고 순서대로 처리됐으며, 마지막에 `[Scheduler] All tasks completed.`가 기록됐습니다.
 
-#### 분석 결론
-
-Deadlock은 프로세스 생존 여부나 스레드 수만으로 판단할 수 없습니다. 작업 완료 로그와 스레드 대기 상태를 함께 확인해야 합니다.
+> **판단:** Deadlock은 프로세스 종료가 아니라 스레드 간 자원 대기로 작업이 끝나지 않는 문제입니다.
 
 [상세 리포트](reports/03-deadlock.md) · [증거 요약](evidence/deadlock/analysis-summary.md)
 
