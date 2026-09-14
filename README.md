@@ -10,9 +10,11 @@
 
 ### 한눈에 보기
 
-- **OOM**: `MemoryGuard` 종료 → 메모리 제한 상향 → OOM 미발생
-- **CPU 과점유**: 내부 부하 임계치 초과 → CPU 설정 하향 → 보호 종료 미발생
-- **Deadlock**: 작업 스레드 순환 대기 → 멀티스레드 비활성화 → 작업 완료
+| 장애 | 문제 상황 | 변경 | 결과 | 분석 결론 |
+| --- | --- | --- | --- | --- |
+| [OOM](#1-oom) | Heap 증가 후 `MemoryGuard` 종료(137) | `MEMORY_LIMIT` 256 → 512 | 메모리 제한 초과 미발생 | Linux OOM Killer가 아닌 내부 보호 종료 |
+| [CPU 과점유](#2-cpu-과점유) | 내부 부하 임계치 초과 후 SIGTERM | `CPU_MAX_OCCUPY` 80 → 40 | 60초 동안 보호 종료 미발생 | 실제 CPU 포화가 아닌 내부 판정값 문제 |
+| [Deadlock](#3-deadlock) | 두 작업 스레드의 순환 대기 | `MULTI_THREAD_ENABLE` true → false | 상호 대기 해소 및 작업 완료 | 프로세스 생존보다 작업·대기 상태 확인 필요 |
 
 <a id="1-oom"></a>
 
@@ -70,70 +72,71 @@ Deadlock은 프로세스 생존 여부나 스레드 수만으로 판단할 수 �
 
 ## 실행 환경
 
-- Linux 또는 WSL
-- Bash
-- x86_64/amd64 또는 arm64/aarch64 CPU
-- `unzip`, `iproute2`, `procps` 패키지
-- root가 아닌 일반 사용자 계정
-
-실험은 WSL의 x86_64 환경에서 검증했습니다. `prepare_environment.sh`가 CPU 아키텍처에 맞는 바이너리를 자동으로 선택합니다.
+- 운영체제: Linux 또는 WSL
+- 지원 아키텍처: x86_64/amd64, arm64/aarch64
+- 셸: Bash
+- 필수 패키지: `unzip`, `iproute2`, `procps`
+- 검증 환경: WSL x86_64
 
 ## 제약 사항
 
-- 애플리케이션은 고정 포트 `15034`를 사용하므로 실행 전에 포트가 비어 있어야 합니다.
-- `AGENT_HOME`은 절대 경로여야 하며, 로그와 증거를 저장할 쓰기 권한이 필요합니다.
-- `MEMORY_LIMIT`는 50~512 사이, `CPU_MAX_OCCUPY`는 10~100 사이의 정수만 허용합니다.
-- `MULTI_THREAD_ENABLE`은 `true/false`, `1/0`, `yes/no` 중 하나여야 합니다.
-- OOM 실험은 실제 메모리를 사용하므로 중요한 작업을 저장한 뒤 실행합니다.
-- 장애 간 영향을 분리하기 위해 CPU 실험은 `MEMORY_LIMIT=512`, Deadlock 실험은 `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`으로 고정합니다.
+- root 계정 실행 불가
+- 고정 포트 `15034` 사용
+- `AGENT_HOME`의 절대 경로와 쓰기 권한 필요
+- OOM 실험의 실제 메모리 사용
 
 ## 환경변수 설정
 
-`prepare_environment.sh`는 다음 기본값으로 `$AGENT_HOME/agent.env`를 생성합니다.
+### 장애 재현 설정
 
-```bash
-AGENT_HOME=$HOME/agent-leak-lab
-AGENT_PORT=15034
-AGENT_UPLOAD_DIR=$AGENT_HOME/upload_files
-AGENT_KEY_PATH=$AGENT_HOME/api_keys
-AGENT_LOG_DIR=$AGENT_HOME/logs
-AGENT_BINARY=$AGENT_HOME/bin/agent-leak-app
+| 환경변수 | 기본값 | 허용값 | 용도 |
+| --- | --- | --- | --- |
+| `MEMORY_LIMIT` | `256` | 50~512 사이의 정수 | 메모리 제한 설정 |
+| `CPU_MAX_OCCUPY` | `80` | 10~100 사이의 정수 | CPU 부하 설정 |
+| `MULTI_THREAD_ENABLE` | `true` | `true/false`, `1/0`, `yes/no` | 멀티스레드 활성화 |
 
-MEMORY_LIMIT=256
-CPU_MAX_OCCUPY=80
-MULTI_THREAD_ENABLE=true
-```
+### 경로 및 실행 설정
 
-기본값을 바꾸려면 환경 준비 스크립트를 실행할 때 값을 전달합니다. `AGENT_HOME`은 절대 경로로 지정합니다.
+| 환경변수 | 기본값 | 용도 |
+| --- | --- | --- |
+| `AGENT_HOME` | `$HOME/agent-leak-lab` | 작업 기준 경로 |
+| `AGENT_PORT` | `15034` | 애플리케이션 고정 포트 |
+| `AGENT_UPLOAD_DIR` | `$AGENT_HOME/upload_files` | 업로드 파일 저장 경로 |
+| `AGENT_KEY_PATH` | `$AGENT_HOME/api_keys` | `secret.key` 저장 경로 |
+| `AGENT_LOG_DIR` | `$AGENT_HOME/logs` | 로그 저장 경로 |
+| `AGENT_BINARY` | `$AGENT_HOME/bin/agent-leak-app` | 아키텍처별 실행 파일 경로 |
+
+### 설정 적용
+
+변경할 값만 `export`한 뒤 환경 준비 스크립트를 실행합니다.
 
 ```bash
 export AGENT_HOME=/home/user/agent-leak-lab
-export MEMORY_LIMIT=256
-export CPU_MAX_OCCUPY=80
-export MULTI_THREAD_ENABLE=true
+export MEMORY_LIMIT=512
+export CPU_MAX_OCCUPY=40
+export MULTI_THREAD_ENABLE=false
 
 ./scripts/prepare_environment.sh
+source "$AGENT_HOME/agent.env"
 ```
-
-생성된 설정은 `source "$AGENT_HOME/agent.env"`로 현재 셸에 적용합니다.
 
 ## 실행 방법
 
 ### 1. 환경 준비
 
 ```bash
+# sudo는 패키지 설치에만 사용
 sudo apt update
 sudo apt install unzip iproute2 procps
 
+# 출력이 있으면 해당 프로세스를 종료한 뒤 계속 진행
 ss -ltnp | grep ':15034'
 
 chmod +x scripts/*.sh
 ./scripts/prepare_environment.sh
-source "$HOME/agent-leak-lab/agent.env"
+source "${AGENT_HOME:-$HOME/agent-leak-lab}/agent.env"
 ./scripts/verify_startup.sh
 ```
-
-15034 포트를 사용 중인 프로세스가 있다면 종료한 뒤 다시 실행합니다. `sudo`는 패키지 설치에만 사용합니다.
 
 ### 2. 장애 재현
 
