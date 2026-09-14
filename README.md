@@ -2,39 +2,61 @@
 
 ## 프로젝트 목적
 
-제공된 `agent-leak-app` 바이너리(실행 가능한 프로그램 파일)를 Linux 환경에서 실행하고, OOM(메모리 부족으로 프로그램이 종료되는 현상), CPU 과점유(CPU 사용량이 지나치게 높아지는 현상), Deadlock(여러 작업이 서로를 기다리며 멈추는 현상)을 관찰·분석하는 프로젝트입니다.
+제공된 `agent-leak-app`을 Linux 환경에서 실행해 OOM, CPU 과점유, Deadlock을 재현·분석하는 프로젝트입니다.
 
-최종적으로 각 장애의 증거와 원인, 설정 변경 전후 결과를 GitHub Issue(문제와 해결 과정을 기록하는 문서) 형식의 리포트로 정리하는 것을 목표로 합니다.
+로그와 시스템 지표로 장애 원인을 규명하고, 설정 변경 전후를 비교해 조치 효과를 검증합니다.
 
-## 주요 기능 또는 구조
+수집한 증거와 분석 결과는 GitHub Issue 형식의 리포트로 정리합니다.
+
+## 프로젝트 구조
 
 ```text
-agent-app-leak.zip                 제공된 실행 파일 압축본
-scripts/prepare_environment.sh    Linux 실행 환경 준비 및 검증
-scripts/verify_startup.sh         정상 부팅과 PID 확인
-scripts/monitor.sh                PID의 CPU·메모리 변화 수집
-scripts/collect_evidence.sh       설정·로그·프로세스·스레드 증거 묶음 수집
-scripts/run_oom_experiment.sh     OOM Before & After 실험 실행
-scripts/verify_oom_evidence.sh    OOM 증거와 비교 결과 검증
-scripts/run_cpu_experiment.sh     CPU Before & After 실험 실행
-scripts/verify_cpu_evidence.sh    CPU 증거와 비교 결과 검증
-scripts/run_deadlock_experiment.sh  Deadlock Before & After 실험 실행
-scripts/verify_deadlock_evidence.sh Deadlock 증거와 비교 결과 검증
-evidence/oom/                     OOM 원본 증거와 분석 요약
-evidence/cpu/                     CPU 원본 증거와 분석 요약
-evidence/deadlock/                Deadlock 원본 증거와 분석 요약
-reports/                          GitHub Issue 형식 장애 리포트 3건
-scripts/verify_reports.sh         리포트 구조와 증거 링크 검증
-implementation_plan.md            단계별 구현 계획
+.
+├── agent-app-leak.zip              # 제공된 실행 파일 압축본
+├── scripts/
+│   ├── prepare_environment.sh      # Linux 실행 환경 준비 및 검증
+│   ├── verify_startup.sh           # 애플리케이션 정상 부팅과 PID 확인
+│   ├── monitor.sh                  # PID의 CPU·메모리 변화 수집
+│   ├── collect_evidence.sh         # 설정·로그·프로세스·스레드 증거 수집
+│   ├── run_oom_experiment.sh       # OOM Before & After 실험
+│   ├── verify_oom_evidence.sh      # OOM 증거 검증
+│   ├── run_cpu_experiment.sh       # CPU Before & After 실험
+│   ├── verify_cpu_evidence.sh      # CPU 증거 검증
+│   ├── run_deadlock_experiment.sh  # Deadlock Before & After 실험
+│   ├── verify_deadlock_evidence.sh # Deadlock 증거 검증
+│   └── verify_reports.sh           # 리포트 구조와 증거 링크 검증
+├── evidence/
+│   ├── oom/                        # OOM 원본 증거와 분석 요약
+│   ├── cpu/                        # CPU 원본 증거와 분석 요약
+│   └── deadlock/                   # Deadlock 원본 증거와 분석 요약
+└── reports/
+    ├── 01-oom-crash.md             # OOM 장애 리포트
+    ├── 02-cpu-latency.md           # CPU 장애 리포트
+    └── 03-deadlock.md              # Deadlock 장애 리포트
 ```
 
-실행 환경 준비, 프로그램 정상 부팅 확인, 세 장애 분석, GitHub Issue 형식 리포트 3건 작성과 로컬 검증까지 완료되어 있습니다. 최종 제출에는 GitHub 저장소의 최신 커밋 링크를 사용하며, 아래의 CPU 측정 차이를 확인한 뒤 변경분을 원격 저장소에 반영해야 합니다.
+구성은 다음 네 영역으로 나뉩니다.
+
+- `scripts/`: 환경 준비, 장애 실험, 증거 수집 및 결과 검증 자동화
+- `evidence/`: OOM, CPU, Deadlock 실험에서 수집한 원본 자료와 분석 요약
+- `reports/`: 현상, 증거, 원인, 조치 순서로 작성한 GitHub Issue 형식 리포트
+- `agent-app-leak.zip`: CPU 아키텍처별 실습용 바이너리가 포함된 제공 파일
 
 ## 실행 방법
 
 ### 1. 필요한 프로그램 확인
 
-Linux 또는 WSL(Windows 안에서 Linux를 실행하는 기능) 환경이 필요합니다. 스크립트와 애플리케이션은 root(Linux 관리자 계정)가 아닌 일반 사용자 계정으로 실행해야 합니다.
+Linux 또는 WSL 환경이 필요합니다. 스크립트와 애플리케이션은 root가 아닌 일반 사용자 계정으로 실행해야 합니다.
+
+일반 사용자 계정으로 실행하는 이유는 다음과 같습니다.
+
+- 이 애플리케이션은 OOM, CPU 과점유, Deadlock을 의도적으로 재현하므로 최소 권한으로 실행해야 파일·프로세스 등 시스템 자원에 미칠 수 있는 영향을 줄일 수 있습니다.
+- 환경 파일, 로그, API 키, 증거 자료를 `$HOME/agent-leak-lab` 아래에 생성합니다. root로 실행하면 파일이 `/root`에 생성되거나 root 소유가 되어 이후 일반 사용자가 접근하거나 실험을 반복할 때 권한 문제가 발생할 수 있습니다.
+- 애플리케이션이 사용하는 15034번 포트는 관리자 권한이 필요한 포트가 아니므로 root 권한을 부여할 필요가 없습니다.
+
+이를 보장하기 위해 준비·검증·실험 스크립트는 실행 시 사용자 ID를 확인하고 root 계정이면 즉시 중단합니다.
+
+아래의 `sudo apt` 명령은 필수 패키지를 설치할 때만 사용합니다. 환경 준비와 장애 실험 스크립트는 `sudo` 없이 일반 사용자 권한으로 실행합니다.
 
 Ubuntu 또는 Debian 계열의 새 Linux 환경이라면 다음 프로그램을 설치합니다.
 
@@ -49,7 +71,7 @@ sudo apt install unzip iproute2 procps
 
 ### 2. 환경 준비 스크립트 실행
 
-프로젝트 디렉터리(프로젝트 파일이 들어 있는 폴더)에서 실행합니다.
+프로젝트 파일이 들어 있는 폴더에서 실행합니다.
 
 ```bash
 chmod +x scripts/prepare_environment.sh
@@ -58,7 +80,7 @@ chmod +x scripts/prepare_environment.sh
 
 ### 3. 환경변수 적용
 
-환경변수(프로그램 실행에 필요한 설정값)를 현재 터미널에 적용합니다.
+환경변수를 현재 터미널에 적용합니다.
 
 ```bash
 source "$HOME/agent-leak-lab/agent.env"
@@ -66,7 +88,7 @@ source "$HOME/agent-leak-lab/agent.env"
 
 ### 4. 정상 부팅 확인
 
-검증 스크립트는 프로그램을 잠깐 실행해 `Agent READY`와 PID(실행 중인 프로그램을 구분하는 번호)를 확인한 뒤 자동으로 종료합니다.
+검증 스크립트는 프로그램을 잠깐 실행해 `Agent READY`와 PID를 확인한 뒤 자동으로 종료합니다.
 
 ```bash
 chmod +x scripts/verify_startup.sh
