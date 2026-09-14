@@ -108,29 +108,41 @@ Deadlock은 프로세스 생존 여부나 스레드 수만으로 판단할 수 �
 
 ## 실행 방법
 
-### 1. 필수 패키지와 포트 확인
+### 1. 필수 패키지 설치
 
 ```bash
 # sudo는 패키지 설치에만 사용
 sudo apt update
 sudo apt install unzip iproute2 procps
-
-# 출력이 있으면 해당 프로세스를 종료한 뒤 계속 진행
-ss -ltnp | grep ':15034'
 ```
 
 ### 2. 환경변수 적용 및 부팅 확인
 
 ```bash
-export AGENT_HOME="${AGENT_HOME:-$HOME/agent-leak-lab}"
-export MEMORY_LIMIT="${MEMORY_LIMIT:-256}"
-export CPU_MAX_OCCUPY="${CPU_MAX_OCCUPY:-80}"
-export MULTI_THREAD_ENABLE="${MULTI_THREAD_ENABLE:-true}"
-
 chmod +x scripts/*.sh
 ./scripts/prepare_environment.sh
-source "$AGENT_HOME/agent.env"
+source "${AGENT_HOME:-$HOME/agent-leak-lab}/agent.env"
 ./scripts/verify_startup.sh
+```
+
+- [`prepare_environment.sh`](scripts/prepare_environment.sh): 애플리케이션 실행에 필요한 환경을 자동으로 구성하는 스크립트
+  - Linux와 일반 사용자 계정 여부, CPU 아키텍처, 15034 포트 사용 가능 여부 확인
+  - 작업 디렉터리와 `secret.key` 생성, 아키텍처에 맞는 바이너리 설치, `agent.env` 작성
+- [`verify_startup.sh`](scripts/verify_startup.sh): 준비된 환경에서 애플리케이션이 정상적으로 시작되는지 확인하는 스크립트
+  - `agent.env`를 불러와 애플리케이션을 실행하고 `Agent READY` 로그와 PID 확인
+  - 시작 로그를 저장한 뒤 장애 실험과 겹치지 않도록 검증용 프로세스 종료
+
+#### 참고용 확인 명령어
+
+```bash
+# 15034 포트 점유 확인
+ss -ltnp | grep ':15034'
+
+# 실행 중인 애플리케이션의 PID 확인
+pgrep -af 'agent-leak-app'
+
+# 확인한 PID의 상태 조회
+ps -p <PID> -o pid,stat,comm,args
 ```
 
 ### 3. 장애 재현
@@ -146,11 +158,28 @@ source "$AGENT_HOME/agent.env"
 ./scripts/run_deadlock_experiment.sh after false
 ```
 
-실험 결과는 `evidence/<장애 유형>/before-<수집 시각>`과 `after-<수집 시각>`에 저장됩니다.
+전달받은 설정값으로 Agent를 실행하고 장애별 상태를 수집합니다.
+
+**스크립트별 역할**
+
+- [`run_oom_experiment.sh`](scripts/run_oom_experiment.sh): [`collect_evidence.sh`](scripts/collect_evidence.sh)로 메모리와 로그를 수집하고 `MemoryGuard`의 종료 여부 확인
+- [`run_cpu_experiment.sh`](scripts/run_cpu_experiment.sh): `top`으로 CPU 사용률을 수집하고 임계치 초과 및 SIGTERM 여부 확인
+- [`run_deadlock_experiment.sh`](scripts/run_deadlock_experiment.sh): `ps -L`과 `top -H`로 스레드 상태를 수집하고 교착 상태 확인
+
+**인수 전달 방식**
+
+Linux 셸은 스크립트 이름 뒤에 공백으로 입력한 값을 왼쪽부터 `$1`, `$2`로 전달합니다. 이 프로젝트에서는 다음과 같이 사용합니다.
+
+- `$1`: 실험 구분(`before` 또는 `after`)
+- `$2`: 적용할 설정값
+
+예를 들어 `run_oom_experiment.sh before 256`을 실행하면 스크립트 내부에서 `before`는 `$1`, `256`은 `$2`로 인식됩니다.
+
+**결과 저장 위치**
+
+`evidence/<장애 유형>/<before|after>-<수집 시각>`
 
 ### 4. 결과 검증
-
-각 실험 명령이 출력한 증거 폴더 경로를 지정합니다.
 
 ```bash
 ./scripts/verify_oom_evidence.sh \
@@ -167,6 +196,16 @@ source "$AGENT_HOME/agent.env"
 
 ./scripts/verify_reports.sh
 ```
+`before`와 `after` 증거 폴더를 차례로 전달받아 설정 변경 전후의 결과를 비교합니다.
+
+**스크립트별 검증 항목**
+
+| 스크립트 | 검증 내용 |
+|---|---|
+| [`verify_oom_evidence.sh`](scripts/verify_oom_evidence.sh) | 메모리 사용량 증가와 `before`의 강제 종료, `after`의 OOM 미발생 확인 |
+| [`verify_cpu_evidence.sh`](scripts/verify_cpu_evidence.sh) | `before`의 CPU 임계치 초과와 SIGTERM 종료, `after`의 정상 생존 확인 |
+| [`verify_deadlock_evidence.sh`](scripts/verify_deadlock_evidence.sh) | `before`의 스레드 교착 상태와 `after`의 작업 완료 확인 |
+| [`verify_reports.sh`](scripts/verify_reports.sh) | 세 장애 리포트의 필수 항목, Before·After 비교 및 증거 파일 링크 확인 |
 
 ## 프로젝트 구조
 
