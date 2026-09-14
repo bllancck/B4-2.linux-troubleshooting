@@ -106,23 +106,9 @@ Deadlock은 프로세스 생존 여부나 스레드 수만으로 판단할 수 �
 | `AGENT_LOG_DIR` | `$AGENT_HOME/logs` | 로그 저장 경로 |
 | `AGENT_BINARY` | `$AGENT_HOME/bin/agent-leak-app` | 아키텍처별 실행 파일 경로 |
 
-### 설정 적용
-
-변경할 값만 `export`한 뒤 환경 준비 스크립트를 실행합니다.
-
-```bash
-export AGENT_HOME=/home/user/agent-leak-lab
-export MEMORY_LIMIT=512
-export CPU_MAX_OCCUPY=40
-export MULTI_THREAD_ENABLE=false
-
-./scripts/prepare_environment.sh
-source "$AGENT_HOME/agent.env"
-```
-
 ## 실행 방법
 
-### 1. 환경 준비
+### 1. 필수 패키지와 포트 확인
 
 ```bash
 # sudo는 패키지 설치에만 사용
@@ -131,14 +117,23 @@ sudo apt install unzip iproute2 procps
 
 # 출력이 있으면 해당 프로세스를 종료한 뒤 계속 진행
 ss -ltnp | grep ':15034'
+```
+
+### 2. 환경변수 적용 및 부팅 확인
+
+```bash
+export AGENT_HOME="${AGENT_HOME:-$HOME/agent-leak-lab}"
+export MEMORY_LIMIT="${MEMORY_LIMIT:-256}"
+export CPU_MAX_OCCUPY="${CPU_MAX_OCCUPY:-80}"
+export MULTI_THREAD_ENABLE="${MULTI_THREAD_ENABLE:-true}"
 
 chmod +x scripts/*.sh
 ./scripts/prepare_environment.sh
-source "${AGENT_HOME:-$HOME/agent-leak-lab}/agent.env"
+source "$AGENT_HOME/agent.env"
 ./scripts/verify_startup.sh
 ```
 
-### 2. 장애 재현
+### 3. 장애 재현
 
 ```bash
 ./scripts/run_oom_experiment.sh before 256
@@ -153,7 +148,7 @@ source "${AGENT_HOME:-$HOME/agent-leak-lab}/agent.env"
 
 실험 결과는 `evidence/<장애 유형>/before-<수집 시각>`과 `after-<수집 시각>`에 저장됩니다.
 
-### 3. 결과 검증
+### 4. 결과 검증
 
 각 실험 명령이 출력한 증거 폴더 경로를 지정합니다.
 
