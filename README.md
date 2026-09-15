@@ -128,8 +128,9 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 ```
 
 같은 방법으로 50회 이상 관찰해 Before 종료 시점을 넘겨도 살아 있는지 확인합니다. 이 설정은 누수 코드를 고친 것이 아니라 메모리 보호 종료를 늦춘 우회 조치입니다.
+<br>
 
-> 자세한 분석은 [reports/01-oom-crash.md](reports/01-oom-crash.md) 에서 확인할 수 있습니다.
+자세한 분석은 [reports/01-oom-crash.md](reports/01-oom-crash.md) 에서 확인할 수 있습니다. 
 
 ## 4. CPU 관찰
 
@@ -163,7 +164,7 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 
 `CPU Threshold Violated` 없이 Before 종료 시점을 넘겨 50회 관찰이 완료되는지 확인합니다.
 
-> 자세한 분석은 [reports/02-cpu-latency.md](reports/02-cpu-latency.md) 에서 확인할 수 있습니다.
+자세한 분석은 [reports/02-cpu-latency.md](reports/02-cpu-latency.md) 에서 확인할 수 있습니다.
 
 ## 5. Deadlock 관찰
 
@@ -204,7 +205,7 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 
 상호 `WAITING/BLOCKED`가 사라지고 `[Scheduler] All tasks completed.`가 출력되는지 확인합니다.
 
-> 자세한 분석은 [reports/03-deadlock.md](reports/03-deadlock.md) 에서 확인할 수 있습니다.
+자세한 분석은 [reports/03-deadlock.md](reports/03-deadlock.md) 에서 확인할 수 있습니다.
 
 ## 6. 결과를 읽는 순서
 
