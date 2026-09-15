@@ -1,0 +1,6 @@
+started_at=2026-09-16T01:59:25+09:00
+finished_at=2026-09-16T01:59:46+09:00
+launcher_pid=5239
+monitored_pid=5242
+process_exit_code=143
+stopped_by_observer=true

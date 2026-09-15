@@ -1,0 +1,4 @@
+    PID     LWP STAT WCHAN                            %CPU %MEM   RSS COMMAND
+   5393    5393 SNl+ futex_wait_queue                  0.7  5.0 197248 agent-leak-app
+   5393    5415 SNl+ do_select                         1.2  5.0 197248 agent-leak-app
+   5393    5416 RNl+ -                                 0.7  5.0 197248 agent-leak-app

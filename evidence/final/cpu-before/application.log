@@ -1,0 +1,41 @@
+>>> Starting Agent Boot Sequence...
+[1/6] Checking User Account               [OK]
+   ... Running as service user 'byj' (uid=1000)
+[2/6] Verifying Environment Variables     [OK]
+   ... All required Envs correct
+[3/6] Checking Required Files             [OK]
+   ... Verified 'secret.key' with correct key string.
+[4/6] Checking Port Availability          [OK]
+   ... Port 15034 is available.
+[5/6] Verifying Log Permission            [OK]
+   ... Log directory is writable: /home/byj/agent-leak-lab/logs
+[6/6] Verifying Mission Environment       [OK]
+   ... MEMORY_LIMIT=512MB, CPU_MAX_OCCUPY=80%, MULTI_THREAD_ENABLE=False
+------------------------------------------------------------
+All Boot Checks Passed!
+Agent READY
+2026-09-16 01:54:06,433 [INFO] [SafetyGuard] Process priority lowered (nice=10).
+2026-09-16 01:54:06,435 [INFO] Agent listening at port 15034
+
+==================================================
+ [ Agent Initiate ] Resource Check
+==================================================
+ [ MEMORY ] Limit: 512MB 		[ OK ]
+ [ CPU    ] Limit: 80%  		[ WARNING: Recommend Under 50% ]
+ [ THREAD ] Concurrency: False 		[ OK ]
+--------------------------------------------------
+ >>> SYSTEM STATUS: STABLE. STARTING WORKLOAD MONITORING...
+==================================================
+
+2026-09-16 01:54:08,452 [INFO] [CpuWorker] Started. Maximum CPU Limit: 80%
+2026-09-16 01:54:08,453 [INFO] [CpuWorker] Current Load: 5.00%
+2026-09-16 01:54:11,588 [INFO] [CpuWorker] Current Load: 6.49%
+2026-09-16 01:54:12,138 [INFO] [CpuWorker] Current Load: 13.38%
+2026-09-16 01:54:15,292 [INFO] [CpuWorker] Current Load: 19.58%
+2026-09-16 01:54:18,441 [INFO] [CpuWorker] Current Load: 20.73%
+2026-09-16 01:54:21,584 [INFO] [CpuWorker] Current Load: 24.06%
+2026-09-16 01:54:24,767 [INFO] [CpuWorker] Current Load: 33.82%
+2026-09-16 01:54:27,899 [INFO] [CpuWorker] Current Load: 42.48%
+2026-09-16 01:54:31,023 [INFO] [CpuWorker] Current Load: 46.78%
+2026-09-16 01:54:34,153 [INFO] [CpuWorker] Current Load: 53.32%
+2026-09-16 01:54:34,259 [CRITICAL] [CpuWorker] CPU Threshold Violated! (53.319999999999986%).

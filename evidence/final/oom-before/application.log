@@ -1,0 +1,42 @@
+>>> Starting Agent Boot Sequence...
+[1/6] Checking User Account               [OK]
+   ... Running as service user 'byj' (uid=1000)
+[2/6] Verifying Environment Variables     [OK]
+   ... All required Envs correct
+[3/6] Checking Required Files             [OK]
+   ... Verified 'secret.key' with correct key string.
+[4/6] Checking Port Availability          [OK]
+   ... Port 15034 is available.
+[5/6] Verifying Log Permission            [OK]
+   ... Log directory is writable: /home/byj/agent-leak-lab/logs
+[6/6] Verifying Mission Environment       [OK]
+   ... MEMORY_LIMIT=256MB, CPU_MAX_OCCUPY=40%, MULTI_THREAD_ENABLE=False
+------------------------------------------------------------
+All Boot Checks Passed!
+Agent READY
+2026-09-16 01:56:25,722 [INFO] [SafetyGuard] Process priority lowered (nice=10).
+2026-09-16 01:56:25,724 [INFO] Agent listening at port 15034
+
+==================================================
+ [ Agent Initiate ] Resource Check
+==================================================
+ [ MEMORY ] Limit: 256MB 		[ WARNING: Recommend Over 256MB ]
+ [ CPU    ] Limit: 40%  		[ OK ]
+ [ THREAD ] Concurrency: False 		[ OK ]
+--------------------------------------------------
+ >>> SYSTEM STATUS: STABLE. STARTING WORKLOAD MONITORING...
+==================================================
+
+2026-09-16 01:56:27,799 [INFO] [MemoryWorker] Current Heap: 25MB
+2026-09-16 01:56:30,861 [INFO] [MemoryWorker] Current Heap: 50MB
+2026-09-16 01:56:33,916 [INFO] [MemoryWorker] Current Heap: 75MB
+2026-09-16 01:56:36,972 [INFO] [MemoryWorker] Current Heap: 100MB
+2026-09-16 01:56:40,046 [INFO] [MemoryWorker] Current Heap: 125MB
+2026-09-16 01:56:43,104 [INFO] [MemoryWorker] Current Heap: 150MB
+2026-09-16 01:56:43,536 [INFO] [MemoryWorker] Current Heap: 175MB
+2026-09-16 01:56:46,592 [INFO] [MemoryWorker] Current Heap: 200MB
+2026-09-16 01:56:49,656 [INFO] [MemoryWorker] Current Heap: 225MB
+2026-09-16 01:56:52,799 [INFO] [MemoryWorker] Current Heap: 250MB
+2026-09-16 01:56:55,861 [INFO] [MemoryWorker] Current Heap: 275MB
+2026-09-16 01:56:55,864 [CRITICAL] [MemoryGuard] Memory limit exceeded (275MB >= 256MB) / (Recommend Over 256MB)
+2026-09-16 01:56:55,865 [CRITICAL] [MemoryGuard] Self-terminating process 4434 to prevent system instability.

@@ -1,0 +1,5 @@
+started_at=2026-09-16T01:54:58+09:00
+finished_at=2026-09-16T01:55:48+09:00
+launcher_pid=4070
+process_exit_code=143
+stopped_by_observer=true

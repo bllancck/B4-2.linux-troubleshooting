@@ -1,242 +1,209 @@
 # Linux 시스템 장애 분석
 
-## 프로젝트 목적
+`agent-leak-app`에서 OOM, CPU 보호 종료, Deadlock을 직접 관찰하는 실습입니다.
 
-애플리케이션 장애를 로그로 분석하고 해결하는 과정을 연습하는 프로젝트입니다.
+이 저장소는 자동화보다 **명령어와 결과의 관계를 이해하는 것**에 초점을 둡니다. 스크립트는 환경 준비용 `setup.sh`와 CPU·메모리를 기록하는 짧은 `monitor.sh`만 사용합니다. 장애 실행과 원인 판정은 Linux 명령어를 직접 보며 진행합니다.
 
-Linux 환경에서 `agent-leak-app`을 실행해 OOM, CPU 과점유, Deadlock을 의도적으로 재현한 뒤, 원인을 파악하고 설정값을 변경해 해결 여부를 검증합니다.
+## 실습 결과
 
-## 트러블슈팅
-
-### 한눈에 보기
-
-| 장애 | 문제 상황 | 변경 | 결과 | 원인 |
-| --- | --- | --- | --- | --- |
-| **OOM** | Heap이 계속 증가해 프로그램 종료 | `MEMORY_LIMIT` `256 → 512` | 메모리 초과 종료 미발생 | 프로그램 내부 메모리 제한 초과 |
-| **CPU 과점유** | 내부 CPU 기준 초과로 프로그램 종료 | `CPU_MAX_OCCUPY` `80 → 40` | CPU 보호 종료 없이 실행 유지 | 애플리케이션 내부 CPU 기준 초과 |
-| **Deadlock** | 프로세스는 살아 있지만 스레드가 서로 기다려 작업이 멈춤 | `MULTI_THREAD_ENABLE` `true → false` | 작업을 순서대로 처리해 완료 | 두 스레드가 서로의 자원을 기다림 |
-
-<a id="1-oom"></a>
-
-### 1. OOM
-
-**Before:** `MEMORY_LIMIT=256`으로 테스트한 결과, `MemoryWorker`가 메모리를 계속 누적하면서 Heap과 RSS가 증가했습니다.
-
-```text
-Heap 증가: 225MB → 250MB → 275MB
-RSS 증가:  18,048KiB → 274,048KiB
-제한 초과: 275MB >= 256MB
-결과:      MemoryGuard가 프로세스를 자체 종료(137)
-```
-
-**After:** `MEMORY_LIMIT=512`로 변경한 뒤에는 메모리 제한 초과와 `MemoryGuard` 종료가 발생하지 않았습니다.
-
-> **판단:** 이번 종료의 원인은 Linux OOM Killer가 아니라 `MemoryWorker`의 메모리 누적으로 내부 메모리 제한을 초과한 `MemoryGuard`였습니다.
-
-[상세 리포트](reports/01-oom-crash.md)
-
-<a id="2-cpu-과점유"></a>
-
-### 2. CPU 과점유
-
-**Before:** `CPU_MAX_OCCUPY=80`에서 애플리케이션 내부 `CpuWorker` 값이 상승하다가 `CPU Threshold Violated` 로그와 SIGTERM이 발생했습니다.
-
-| 측정 대상 | 관찰 결과 |
-| --- | --- |
-| 애플리케이션 내부 값 | `5.00% → 55.11%`로 상승 후 임계치 초과 |
-| Linux `top` | 같은 구간의 최댓값 약 `5%` |
-
-이 실험에서 확인하려는 핵심은 Linux의 실제 CPU 사용률 자체가 아니라, 애플리케이션이 내부 기준을 넘었다고 판단해 보호 종료하는 동작입니다.
-
-**After:** `MEMORY_LIMIT=512`를 유지하고 `CPU_MAX_OCCUPY`를 `40`으로 낮춘 After 설정에서는 CPU 임계치 초과와 보호 종료가 발생하지 않았습니다.
-
-> **판단:** 이 장애는 실제 Linux CPU 과점유가 아니라, `CPU_MAX_OCCUPY=80`에서 내부 부하 판정값이 안전 기준을 넘어 발생한 애플리케이션의 보호 종료입니다.
-
-[상세 리포트](reports/02-cpu-latency.md)
-
-<a id="3-deadlock"></a>
-
-### 3. Deadlock
-
-**Before:** `MULTI_THREAD_ENABLE=true`에서 두 작업 스레드가 자원을 하나씩 보유한 채 서로가 가진 자원을 기다렸습니다.
-
-```text
-스레드 A: Shared_Memory_A 보유 → Socket_Pool_B 대기
-스레드 B: Socket_Pool_B 보유   → Shared_Memory_A 대기
-```
-
-[애플리케이션 로그](evidence/deadlock/before-20260913-203109-415113757/application-full.log)가 두 작업 스레드의 `WAITING/BLOCKED`에서 멈춘 뒤 약 22초 동안 새 작업 로그와 완료 메시지를 남기지 않아 작업 정체를 감지했습니다. 프로세스 종료 여부를 확인한 결과, 30초 관찰 후에도 [실행 요약](evidence/deadlock/before-20260913-203109-415113757/run-summary.txt)에 `process_alive_after_observation=true`가 기록됐고 [최종 프로세스 상태](evidence/deadlock/before-20260913-203109-415113757/process-final.txt)에도 PID `16535`가 남아 있었습니다. 이어 [스레드 대기 위치](evidence/deadlock/before-20260913-203109-415113757/thread-wait-channels.txt)를 확인하자 스레드들이 `futex_wait_queue`에서 대기 중이었습니다.
-
-[애플리케이션 로그와 linux 명령어로 Deadlock을 확인한 과정](docs/deadlock-observation-guide.md)
-
-**After:** `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`을 유지하고 `MULTI_THREAD_ENABLE=false`로 변경했습니다. 멀티스레드 동시 처리를 끄자 작업이 서로 자원을 기다리지 않고 순서대로 처리됐으며, 마지막에 `[Scheduler] All tasks completed.`가 기록됐습니다.
-
-> **판단:** PID가 살아 있는데도 두 스레드가 `futex_wait_queue`에서 멈췄으므로, 이 현상은 단순한 처리 지연이 아니라 교차 잠금에 의한 Deadlock으로 판단했습니다.
-
-[상세 리포트](reports/03-deadlock.md)
-
-## 실행 환경
-
-- 운영체제: Linux 또는 WSL
-- 지원 아키텍처: x86_64/amd64, arm64/aarch64
-- 셸: Bash
-- 필수 패키지: `unzip`, `iproute2`, `procps`
-- 검증 환경: WSL x86_64
-
-## 제약 사항
-
-- root 계정 실행 불가
-- 고정 포트 `15034` 사용
-- `AGENT_HOME`과 관련 디렉터리의 절대 경로 및 현재 계정의 쓰기 권한 필요
-- OOM 실험의 실제 메모리 사용
-
-## 환경변수 설정
-
-### 장애 재현 설정
-
-| 환경변수 | 기본값 | 허용값 | 용도 |
+| 장애 | Before | 바꾼 값 | After |
 | --- | --- | --- | --- |
-| `MEMORY_LIMIT` | `256` | 50~512 사이의 정수 | 메모리 제한 설정 |
-| `CPU_MAX_OCCUPY` | `80` | 10~100 사이의 정수 | CPU 부하 설정 |
-| `MULTI_THREAD_ENABLE` | `true` | `true/false`, `1/0`, `yes/no` | 멀티스레드 활성화 |
+| OOM | Heap과 RSS가 증가한 뒤 `MemoryGuard`가 종료 | `MEMORY_LIMIT=256 → 512` | 메모리 제한 초과가 발생하지 않음 |
+| CPU | 내부 부하 값이 상승한 뒤 SIGTERM 종료 | `CPU_MAX_OCCUPY=80 → 40` | CPU 보호 종료가 발생하지 않음 |
+| Deadlock | PID는 살아 있지만 두 스레드가 서로 대기 | `MULTI_THREAD_ENABLE=true → false` | 작업이 순서대로 완료됨 |
 
-### 경로 및 실행 설정
+자세한 분석은 [OOM](reports/01-oom-crash.md), [CPU](reports/02-cpu-latency.md), [Deadlock](reports/03-deadlock.md) 리포트에서 확인할 수 있습니다.
 
-| 환경변수 | 기본값 또는 생성값 | 용도 |
-| --- | --- | --- |
-| `AGENT_HOME` | `$HOME/agent-leak-lab` | 작업 기준 경로 |
-| `AGENT_PORT` | `15034` | 애플리케이션 고정 포트 |
-| `AGENT_UPLOAD_DIR` | `$AGENT_HOME/upload_files` | 업로드 파일 저장 경로 |
-| `AGENT_KEY_PATH` | `$AGENT_HOME/api_keys` | `secret.key` 저장 경로 |
-| `AGENT_LOG_DIR` | `$AGENT_HOME/logs` | 로그 저장 경로 |
-| `AGENT_BINARY` | `$AGENT_HOME/bin/agent-leak-app` | 아키텍처별 실행 파일 경로 |
+## 1. 준비
 
-이미 셸에 같은 이름의 환경변수가 있으면 기본값보다 우선합니다. 이전 계정에서 사용한 `AGENT_*` 값이 남아 있으면 다른 사용자의 홈이나 `/var/log` 아래에 디렉터리를 만들려다 권한 오류가 발생할 수 있으므로, 기본 경로로 준비할 때는 기존 값을 먼저 해제합니다. 이전 이름인 `AGENT_APP_BIN`은 이 프로젝트에서 사용하지 않습니다.
-
-## 실행 방법
-
-### 1. 필수 패키지 설치
+Linux 또는 WSL의 일반 사용자 계정에서 실행합니다. OOM 실험은 실제 메모리를 사용하며 애플리케이션은 고정 포트 `15034`를 사용합니다.
 
 ```bash
-# sudo는 패키지 설치에만 사용
 sudo apt update
-sudo apt install unzip iproute2 procps
-```
+sudo apt install unzip procps iproute2
 
-### 2. 환경변수 적용 및 부팅 확인
-
-```bash
-# 이전 셸이나 다른 계정에서 설정한 경로 제거
-unset AGENT_HOME AGENT_PORT AGENT_UPLOAD_DIR AGENT_KEY_PATH
-unset AGENT_LOG_DIR AGENT_BINARY AGENT_APP_BIN AGENT_ENV_FILE
-
-chmod +x scripts/*.sh
-./scripts/prepare_environment.sh
+bash scripts/setup.sh
 source "$HOME/agent-leak-lab/agent.env"
-./scripts/verify_startup.sh
 ```
 
-위 명령은 기본 경로인 `$HOME/agent-leak-lab`을 사용합니다. 사용자 지정 경로가 필요하면 기존 값을 해제한 다음 `AGENT_HOME`과 관련 경로를 현재 계정이 쓸 수 있는 절대 경로로 다시 설정하고 `prepare_environment.sh`를 실행해야 합니다.
+`setup.sh`가 하는 일은 다음 다섯 가지입니다.
 
-- [`prepare_environment.sh`](scripts/prepare_environment.sh): 애플리케이션 실행에 필요한 환경을 자동으로 구성하는 스크립트
-  - Linux와 일반 사용자 계정 여부, CPU 아키텍처, 15034 포트 사용 가능 여부 확인
-  - 작업 디렉터리의 생성·쓰기 권한 확인, `secret.key` 생성, 아키텍처에 맞는 바이너리 설치, `agent.env` 작성
-- [`verify_startup.sh`](scripts/verify_startup.sh): 준비된 환경에서 애플리케이션이 정상적으로 시작되는지 확인하는 스크립트
-  - `agent.env`를 불러와 애플리케이션을 실행하고 `Agent READY` 로그와 PID 확인
-  - 시작 로그를 저장한 뒤 장애 실험과 겹치지 않도록 검증용 프로세스 종료
+1. CPU 아키텍처에 맞는 실행 파일을 압축에서 꺼냅니다.
+2. 실습용 디렉터리를 `$HOME/agent-leak-lab`에 만듭니다.
+3. 필요한 `secret.key`를 만듭니다.
+4. 공통 경로가 담긴 `agent.env`를 만듭니다.
+5. 고정 포트 `15034`를 사용할 수 있는지 확인합니다.
 
-#### 참고용 확인 명령어
+다른 작업 경로를 사용하려면 절대 경로를 인수로 전달합니다.
 
 ```bash
-# 15034 포트 점유 확인
-ss -ltnp | grep ':15034'
-
-# 실행 중인 애플리케이션의 PID 확인
-pgrep -af 'agent-leak-app'
-
-# 확인한 PID의 상태 조회
-ps -p <PID> -o pid,stat,comm,args
+bash scripts/setup.sh "$HOME/my-agent-lab"
+source "$HOME/my-agent-lab/agent.env"
 ```
 
-### 3. 장애 재현
+## 2. 관찰 방법
+
+터미널을 두 개 사용하면 흐름을 이해하기 쉽습니다.
+
+- 터미널 A: 애플리케이션을 실행하고 로그를 봅니다.
+- 터미널 B: `ps`나 `top`으로 Linux가 보는 프로세스 상태를 확인합니다.
+
+이 앱은 같은 이름의 상위 프로세스와 작업 프로세스를 만듭니다. 메모리와 스레드는 가장 최근에 생성된 작업 PID를, CPU 종료 여부는 먼저 생성된 상위 PID를 확인합니다.
 
 ```bash
-./scripts/run_oom_experiment.sh before 256
-./scripts/run_oom_experiment.sh after 512
+# 메모리와 Deadlock 관찰
+WORKER_PID="$(pgrep -n -x agent-leak-app)"
 
-./scripts/run_cpu_experiment.sh before 80
-./scripts/run_cpu_experiment.sh after 40
+# CPU 관찰
+APP_PID="$(pgrep -o -x agent-leak-app)"
 
-./scripts/run_deadlock_experiment.sh before true
-./scripts/run_deadlock_experiment.sh after false
+pgrep -af agent-leak-app
 ```
 
-전달받은 설정값으로 Agent를 실행하고 장애별 상태를 수집합니다.
-
-**스크립트별 역할**
-
-- [`run_oom_experiment.sh`](scripts/run_oom_experiment.sh): [`collect_evidence.sh`](scripts/collect_evidence.sh)로 메모리와 로그를 수집하고 `MemoryGuard`의 종료 여부 확인
-- [`run_cpu_experiment.sh`](scripts/run_cpu_experiment.sh): `top`으로 CPU 사용률을 수집하고 임계치 초과 및 SIGTERM 여부 확인
-- [`run_deadlock_experiment.sh`](scripts/run_deadlock_experiment.sh): `ps -L`과 `top -H`로 스레드 상태를 수집하고 교착 상태 확인
-
-**인수 전달 방식**
-
-Linux 셸은 스크립트 이름 뒤에 공백으로 입력한 값을 왼쪽부터 `$1`, `$2`로 전달합니다. 이 프로젝트에서는 다음과 같이 사용합니다.
-
-- `$1`: 실험 구분(`before` 또는 `after`)
-- `$2`: 적용할 설정값
-
-예를 들어 `run_oom_experiment.sh before 256`을 실행하면 스크립트 내부에서 `before`는 `$1`, `256`은 `$2`로 인식됩니다.
-
-**결과 저장 위치**
-
-`evidence/<장애 유형>/<before|after>-<수집 시각>`
-
-### 4. 결과 검증
+`monitor.sh`는 지정한 PID의 CPU, 메모리, RSS를 1초마다 화면과 파일에 기록합니다.
 
 ```bash
-./scripts/verify_oom_evidence.sh \
-  evidence/oom/before-<수집 시각> \
-  evidence/oom/after-<수집 시각>
-
-./scripts/verify_cpu_evidence.sh \
-  evidence/cpu/before-<수집 시각> \
-  evidence/cpu/after-<수집 시각>
-
-./scripts/verify_deadlock_evidence.sh \
-  evidence/deadlock/before-<수집 시각> \
-  evidence/deadlock/after-<수집 시각>
-
-./scripts/verify_reports.sh
+bash scripts/monitor.sh <PID> <관찰 횟수> <저장 파일>
 ```
-`before`와 `after` 증거 폴더를 차례로 전달받아 설정 변경 전후의 결과를 비교합니다.
 
-**스크립트별 검증 항목**
+다음 실험 전에는 터미널 A에서 `Ctrl+C`로 이전 실행을 끝내고 `pgrep -af agent-leak-app`에 남은 프로세스가 없는지 확인합니다.
 
-| 스크립트 | 검증 내용 |
-|---|---|
-| [`verify_oom_evidence.sh`](scripts/verify_oom_evidence.sh) | 메모리 사용량 증가와 `before`의 강제 종료, `after`의 OOM 미발생 확인 |
-| [`verify_cpu_evidence.sh`](scripts/verify_cpu_evidence.sh) | `before`의 CPU 임계치 초과와 SIGTERM 종료, `after`의 정상 생존 확인 |
-| [`verify_deadlock_evidence.sh`](scripts/verify_deadlock_evidence.sh) | `before`의 스레드 교착 상태와 `after`의 작업 완료 확인 |
-| [`verify_reports.sh`](scripts/verify_reports.sh) | 세 장애 리포트의 필수 항목, Before·After 비교 및 증거 파일 링크 확인 |
+## 3. OOM 관찰
+
+### Before: 메모리 제한 256MB
+
+터미널 A:
+
+```bash
+MEMORY_LIMIT=256 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/oom-before.log"
+```
+
+터미널 B:
+
+```bash
+WORKER_PID="$(pgrep -n -x agent-leak-app)"
+bash scripts/monitor.sh "$WORKER_PID" 60 oom-before-monitor.log
+```
+
+확인할 내용은 두 가지입니다.
+
+- 앱 로그: `Current Heap`이 증가하고 `Memory limit exceeded`가 나타나는가?
+- `monitor.sh`: RSS가 시간에 따라 증가한 뒤 `PROCESS_EXITED`가 기록되는가?
+
+### After: 메모리 제한 512MB
+
+```bash
+MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/oom-after.log"
+```
+
+같은 방법으로 50회 이상 관찰해 Before 종료 시점을 넘겨도 살아 있는지 확인합니다. 이 설정은 누수 코드를 고친 것이 아니라 메모리 보호 종료를 늦춘 우회 조치입니다.
+
+## 4. CPU 관찰
+
+OOM과 Deadlock이 섞이지 않도록 두 실행 모두 `MEMORY_LIMIT=512`, `MULTI_THREAD_ENABLE=false`를 사용합니다.
+
+### Before: CPU 설정 80
+
+터미널 A:
+
+```bash
+MEMORY_LIMIT=512 CPU_MAX_OCCUPY=80 MULTI_THREAD_ENABLE=false \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/cpu-before.log"
+```
+
+터미널 B:
+
+```bash
+APP_PID="$(pgrep -o -x agent-leak-app)"
+bash scripts/monitor.sh "$APP_PID" 60 cpu-before-monitor.log
+top -p "$APP_PID"
+```
+
+앱 로그의 `Current Load`와 Linux `top`의 `%CPU`는 서로 다른 값입니다. 이 바이너리에서는 내부값만 상승하고 Linux 실측값은 상승하지 않았습니다. 내부 부하 판정값이 안전 기준을 넘으면 `CPU Threshold Violated`를 남기고 SIGTERM으로 종료됩니다.
+
+### After: CPU 설정 40
+
+```bash
+MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/cpu-after.log"
+```
+
+`CPU Threshold Violated` 없이 Before 종료 시점을 넘겨 50회 관찰이 완료되는지 확인합니다.
+
+## 5. Deadlock 관찰
+
+메모리와 CPU 장애를 피하기 위해 두 실행 모두 `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`을 사용합니다.
+
+### Before: 멀티스레드 사용
+
+터미널 A:
+
+```bash
+MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=true \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/deadlock-before.log"
+```
+
+`WAITING`과 `BLOCKED`에서 로그 진행이 멈추면 터미널 B에서 확인합니다.
+
+```bash
+PID="$(pgrep -n -x agent-leak-app)"
+
+# CPU와 메모리 정체를 파일로 기록
+bash scripts/monitor.sh "$PID" 20 deadlock-before-monitor.log
+
+# 프로세스가 아직 살아 있는가?
+ps -p "$PID" -o pid,stat,%cpu,rss,etime,comm
+
+# 각 스레드는 어디에서 기다리는가?
+ps -L -p "$PID" -o pid,lwp,stat,wchan:32,%cpu,comm
+```
+
+PID가 살아 있고 작업 로그는 멈췄으며 작업 스레드가 `futex_wait_queue`에서 기다리면 교차 잠금에 의한 Deadlock으로 판단할 수 있습니다. 확인 후 `Ctrl+C`로 종료합니다.
+
+### After: 멀티스레드 사용 안 함
+
+```bash
+MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
+  "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/deadlock-after.log"
+```
+
+상호 `WAITING/BLOCKED`가 사라지고 `[Scheduler] All tasks completed.`가 출력되는지 확인합니다.
+
+## 6. 결과를 읽는 순서
+
+한꺼번에 모든 파일을 볼 필요는 없습니다. 장애마다 다음 순서만 지킵니다.
+
+1. 터미널 A의 앱 로그에서 현상을 찾습니다.
+2. 필요한 Linux 명령어 하나로 앱 밖의 상태를 확인합니다.
+3. 환경변수 하나를 바꿔 다시 실행합니다.
+4. Before와 After의 차이를 적습니다.
+
+저장소의 `evidence/`는 이미 수행한 실험의 원본 기록입니다. 처음에는 [증거 읽기 안내](evidence/README.md)에 표시된 핵심 파일만 보면 됩니다.
+
+## 환경변수
+
+| 변수 | 실습 범위 | 의미 |
+| --- | --- | --- |
+| `MEMORY_LIMIT` | 50~512 | 애플리케이션 메모리 제한(MB) |
+| `CPU_MAX_OCCUPY` | 10~100 | 애플리케이션 내부 CPU 설정 |
+| `MULTI_THREAD_ENABLE` | `true` 또는 `false` | 멀티스레드 작업 사용 여부 |
+
+경로와 포트는 `setup.sh`가 만든 `agent.env`에서 설정합니다. 실험할 때는 위 세 변수만 바꿉니다.
 
 ## 프로젝트 구조
 
 ```text
 .
-├── agent-app-leak.zip              # 제공된 실행 파일 압축본
+├── agent-app-leak.zip       # 제공된 Linux 실행 파일
 ├── scripts/
-│   ├── prepare_environment.sh      # Linux 실행 환경 준비 및 검증
-│   ├── verify_startup.sh           # 정상 부팅과 PID 확인
-│   ├── monitor.sh                  # CPU·메모리 변화 수집
-│   ├── collect_evidence.sh         # 장애 증거 수집
-│   ├── run_oom_experiment.sh       # OOM Before & After 실험
-│   ├── verify_oom_evidence.sh      # OOM 증거 검증
-│   ├── run_cpu_experiment.sh       # CPU Before & After 실험
-│   ├── verify_cpu_evidence.sh      # CPU 증거 검증
-│   ├── run_deadlock_experiment.sh  # Deadlock Before & After 실험
-│   ├── verify_deadlock_evidence.sh # Deadlock 증거 검증
-│   └── verify_reports.sh           # 리포트와 증거 링크 검증
-├── evidence/                       # 장애별 로그와 관제 데이터 등 원본 증거
-└── reports/                        # 원본 증거를 분석한 GitHub Issue 형식 상세 리포트
+│   ├── setup.sh             # 최초 한 번 실행하는 환경 준비 스크립트
+│   └── monitor.sh           # PID의 CPU·메모리를 1초마다 기록
+├── evidence/                # 실험의 원본 로그와 Linux 관찰 결과
+├── reports/                 # 장애별 분석 리포트 3건
+└── docs/
+    └── deadlock-observation-guide.md
 ```
+
+문제가 생기면 자동 검증 스크립트를 찾기보다 먼저 앱 로그의 마지막 줄, `pgrep -af agent-leak-app`, 그리고 해당 장애의 Linux 관찰 명령을 차례로 확인합니다.
