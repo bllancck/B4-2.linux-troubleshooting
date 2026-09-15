@@ -38,7 +38,7 @@ main() {
   environment_file="${AGENT_ENV_FILE:-$configured_agent_home/agent.env}"
   startup_timeout_seconds="${STARTUP_TIMEOUT_SECONDS:-10}"
 
-  [[ -f "$environment_file" ]] || fail "환경 파일이 없습니다: $environment_file"
+  [[ -f "$environment_file" ]] || fail "환경 파일이 없습니다: $environment_file. 다른 계정의 AGENT_HOME이 남아 있는지 확인하고 prepare_environment.sh를 다시 실행하세요."
   [[ "$startup_timeout_seconds" =~ ^[0-9]+$ ]] || fail 'STARTUP_TIMEOUT_SECONDS는 정수여야 합니다.'
   ((startup_timeout_seconds >= 1 && startup_timeout_seconds <= 60)) || fail 'STARTUP_TIMEOUT_SECONDS는 1~60초 사이여야 합니다.'
 

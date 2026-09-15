@@ -87,7 +87,7 @@ RSS 증가:  18,048KiB → 274,048KiB
 
 - root 계정 실행 불가
 - 고정 포트 `15034` 사용
-- `AGENT_HOME`의 절대 경로와 쓰기 권한 필요
+- `AGENT_HOME`과 관련 디렉터리의 절대 경로 및 현재 계정의 쓰기 권한 필요
 - OOM 실험의 실제 메모리 사용
 
 ## 환경변수 설정
@@ -102,7 +102,7 @@ RSS 증가:  18,048KiB → 274,048KiB
 
 ### 경로 및 실행 설정
 
-| 환경변수 | 기본값 | 용도 |
+| 환경변수 | 기본값 또는 생성값 | 용도 |
 | --- | --- | --- |
 | `AGENT_HOME` | `$HOME/agent-leak-lab` | 작업 기준 경로 |
 | `AGENT_PORT` | `15034` | 애플리케이션 고정 포트 |
@@ -110,6 +110,8 @@ RSS 증가:  18,048KiB → 274,048KiB
 | `AGENT_KEY_PATH` | `$AGENT_HOME/api_keys` | `secret.key` 저장 경로 |
 | `AGENT_LOG_DIR` | `$AGENT_HOME/logs` | 로그 저장 경로 |
 | `AGENT_BINARY` | `$AGENT_HOME/bin/agent-leak-app` | 아키텍처별 실행 파일 경로 |
+
+이미 셸에 같은 이름의 환경변수가 있으면 기본값보다 우선합니다. 이전 계정에서 사용한 `AGENT_*` 값이 남아 있으면 다른 사용자의 홈이나 `/var/log` 아래에 디렉터리를 만들려다 권한 오류가 발생할 수 있으므로, 기본 경로로 준비할 때는 기존 값을 먼저 해제합니다. 이전 이름인 `AGENT_APP_BIN`은 이 프로젝트에서 사용하지 않습니다.
 
 ## 실행 방법
 
@@ -124,15 +126,21 @@ sudo apt install unzip iproute2 procps
 ### 2. 환경변수 적용 및 부팅 확인
 
 ```bash
+# 이전 셸이나 다른 계정에서 설정한 경로 제거
+unset AGENT_HOME AGENT_PORT AGENT_UPLOAD_DIR AGENT_KEY_PATH
+unset AGENT_LOG_DIR AGENT_BINARY AGENT_APP_BIN AGENT_ENV_FILE
+
 chmod +x scripts/*.sh
 ./scripts/prepare_environment.sh
-source "${AGENT_HOME:-$HOME/agent-leak-lab}/agent.env"
+source "$HOME/agent-leak-lab/agent.env"
 ./scripts/verify_startup.sh
 ```
 
+위 명령은 기본 경로인 `$HOME/agent-leak-lab`을 사용합니다. 사용자 지정 경로가 필요하면 기존 값을 해제한 다음 `AGENT_HOME`과 관련 경로를 현재 계정이 쓸 수 있는 절대 경로로 다시 설정하고 `prepare_environment.sh`를 실행해야 합니다.
+
 - [`prepare_environment.sh`](scripts/prepare_environment.sh): 애플리케이션 실행에 필요한 환경을 자동으로 구성하는 스크립트
   - Linux와 일반 사용자 계정 여부, CPU 아키텍처, 15034 포트 사용 가능 여부 확인
-  - 작업 디렉터리와 `secret.key` 생성, 아키텍처에 맞는 바이너리 설치, `agent.env` 작성
+  - 작업 디렉터리의 생성·쓰기 권한 확인, `secret.key` 생성, 아키텍처에 맞는 바이너리 설치, `agent.env` 작성
 - [`verify_startup.sh`](scripts/verify_startup.sh): 준비된 환경에서 애플리케이션이 정상적으로 시작되는지 확인하는 스크립트
   - `agent.env`를 불러와 애플리케이션을 실행하고 `Agent READY` 로그와 PID 확인
   - 시작 로그를 저장한 뒤 장애 실험과 겹치지 않도록 검증용 프로세스 종료

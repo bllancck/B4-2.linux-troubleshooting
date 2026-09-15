@@ -9,6 +9,15 @@ fail() {
   exit 1
 }
 
+create_writable_directory() {
+  local variable_name="$1"
+  local directory="$2"
+
+  if ! mkdir -p "$directory" 2>/dev/null || [[ ! -w "$directory" ]]; then
+    fail "$variable_name 경로를 생성하거나 쓸 수 없습니다: $directory (현재 사용자: $(id -un), HOME: $HOME). 이전 계정의 AGENT_* 환경변수가 남아 있는지 확인하세요."
+  fi
+}
+
 is_integer_in_range() {
   local value="$1"
   local minimum="$2"
@@ -104,7 +113,11 @@ main() {
 
   [[ -f "$archive_path" ]] || fail "제공 파일을 찾을 수 없습니다: $archive_path"
 
-  mkdir -p "$AGENT_UPLOAD_DIR" "$AGENT_KEY_PATH" "$AGENT_LOG_DIR" "$AGENT_HOME/bin"
+  create_writable_directory AGENT_HOME "$AGENT_HOME"
+  create_writable_directory AGENT_UPLOAD_DIR "$AGENT_UPLOAD_DIR"
+  create_writable_directory AGENT_KEY_PATH "$AGENT_KEY_PATH"
+  create_writable_directory AGENT_LOG_DIR "$AGENT_LOG_DIR"
+  create_writable_directory AGENT_BINARY "$(dirname -- "$AGENT_BINARY")"
   install_binary "$archive_path" "$binary_name"
   printf '%s\n' "$REQUIRED_KEY_CONTENT" >"$AGENT_KEY_PATH/secret.key"
   chmod 0600 "$AGENT_KEY_PATH/secret.key"

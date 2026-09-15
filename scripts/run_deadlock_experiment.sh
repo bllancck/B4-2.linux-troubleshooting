@@ -146,7 +146,7 @@ main() {
 
   configured_agent_home="${AGENT_HOME:-$HOME/agent-leak-lab}"
   environment_file="${AGENT_ENV_FILE:-$configured_agent_home/agent.env}"
-  [[ -f "$environment_file" ]] || fail "환경 파일이 없습니다: $environment_file"
+  [[ -f "$environment_file" ]] || fail "환경 파일이 없습니다: $environment_file. 다른 계정의 AGENT_HOME이 남아 있는지 확인하고 prepare_environment.sh를 다시 실행하세요."
 
   # shellcheck disable=SC1090
   source "$environment_file"
