@@ -12,11 +12,9 @@ CPU_MAX_OCCUPY=80
 MULTI_THREAD_ENABLE=true
 ```
 
-이 현상은 Linux 전체 메모리가 고갈되어 발생한 커널 OOM 종료가 아니라, 애플리케이션 내부 보호 기능에 의한 자기 종료다.
-
 ## 2. Evidence & Logs (증거 자료)
 
-Before 설정은 [settings.txt](../evidence/oom/before-20260913-194113-782307006/settings.txt), 전체 실행 결과는 [run-summary.txt](../evidence/oom/before-20260913-194113-782307006/run-summary.txt)에서 확인할 수 있다.
+Before 설정은 [settings.txt](../evidence/oom/before-20260913-194113-782307006/settings.txt), 실험 스크립트가 수집한 종료 코드 `137`은 [run-summary.txt](../evidence/oom/before-20260913-194113-782307006/run-summary.txt)에서 확인할 수 있다.
 
 시간별 관제 자료인 [metrics.tsv](../evidence/oom/before-20260913-194113-782307006/metrics.tsv)에서는 RSS가 다음처럼 증가했다.
 
@@ -36,13 +34,10 @@ Before 설정은 [settings.txt](../evidence/oom/before-20260913-194113-782307006
 [MemoryGuard] Self-terminating process ... to prevent system instability.
 ```
 
-프로세스 종료 코드는 137이었다. 애플리케이션이 로그로 자기 종료를 선언한 직후 프로세스가 사라졌다는 점은 단순 부팅 실패와도 구분된다.
-
 추가 자료:
 
 - [수집 시작 프로세스 상태](../evidence/oom/before-20260913-194113-782307006/process-initial.txt)
 - [수집 시작 top 출력](../evidence/oom/before-20260913-194113-782307006/top-initial.txt)
-- [분석 요약](../evidence/oom/analysis-summary.md)
 
 ## 3. Root Cause Analysis (원인 분석)
 
@@ -52,11 +47,9 @@ Before 설정은 [settings.txt](../evidence/oom/before-20260913-194113-782307006
 
 커널 OOM Killer가 개입했다면 커널 로그에 `Out of memory`나 `Killed process` 같은 흔적이 남지만, 이번 실험에서는 관련 기록이 없었고 WSL의 가용 메모리도 충분했다. 종료 코드 137만으로 커널 OOM을 단정할 수 없으며, 종료 직전 `MemoryGuard`가 `Self-terminating process`를 기록한 점에서 애플리케이션이 직접 종료한 것으로 판단한다.
 
-제공된 바이너리 내부 코드는 수정할 수 없으므로 메모리 할당과 해제 로직을 고치는 근본 해결은 이번 과제 범위에 포함되지 않는다.
-
 ## 4. Workaround & Verification (조치 및 검증)
 
-우회 설정으로 `MEMORY_LIMIT`만 허용 범위의 512MB로 높였다.
+메모리 누수를 근본적으로 해결하려면 사용이 끝난 메모리를 해제하도록 내부 로직을 수정해야 한다. 제공된 바이너리의 소스 코드는 수정할 수 없으므로, 이번 과제에서는 우회 설정으로 `MEMORY_LIMIT`만 허용 범위의 512MB로 높였다.
 
 ```text
 Before: MEMORY_LIMIT=256
@@ -75,6 +68,8 @@ oom_observed:            false
 ```
 
 [After 전체 로그](../evidence/oom/after-20260913-195102-393699520/application-full.log)에서 512MB 설정은 `[OK]`로 판정됐다. 메모리 장애 대신 다음 우선순위의 CPU 보호 기능이 실행됐으므로 전체 프로그램이 안정화된 것은 아니지만, 해당 실행에서 OOM Crash는 재현되지 않았다.
+
+이 조치는 `MemoryWorker`의 메모리 할당 방식을 바꾸지 않으므로 메모리 누수 자체를 제거한 근본 해결은 아니다.
 
 자동 검증은 다음 명령으로 다시 수행할 수 있다.
 

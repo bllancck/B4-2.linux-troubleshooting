@@ -12,7 +12,7 @@ Linux 환경에서 `agent-leak-app`을 실행해 OOM, CPU 과점유, Deadlock을
 
 | 장애 | 문제 상황 | 변경 | 결과 | 원인 |
 | --- | --- | --- | --- | --- |
-| **OOM** | [Heap](docs/concepts.md#heap)이 계속 증가해 프로그램 종료 | `MEMORY_LIMIT` `256 → 512` | 메모리 초과 종료 미발생 | 프로그램 내부 메모리 제한 초과 |
+| **OOM** | Heap이 계속 증가해 프로그램 종료 | `MEMORY_LIMIT` `256 → 512` | 메모리 초과 종료 미발생 | 프로그램 내부 메모리 제한 초과 |
 | **CPU 과점유** | 내부 CPU 기준 초과로 프로그램 종료 | `CPU_MAX_OCCUPY` `80 → 40` | CPU 보호 종료 없이 실행 유지 | 애플리케이션 내부 CPU 기준 초과 |
 | **Deadlock** | 프로세스는 살아 있지만 스레드가 서로 기다려 작업이 멈춤 | `MULTI_THREAD_ENABLE` `true → false` | 작업을 순서대로 처리해 완료 | 두 스레드가 서로의 자원을 기다림 |
 
@@ -20,7 +20,7 @@ Linux 환경에서 `agent-leak-app`을 실행해 OOM, CPU 과점유, Deadlock을
 
 ### 1. OOM
 
-`MEMORY_LIMIT=256`으로 테스트한 결과, `MemoryWorker`가 메모리를 계속 누적하면서 Heap과 RSS가 증가했습니다.
+**Before:** `MEMORY_LIMIT=256`으로 테스트한 결과, `MemoryWorker`가 메모리를 계속 누적하면서 Heap과 RSS가 증가했습니다.
 
 ```text
 Heap 증가: 225MB → 250MB → 275MB
@@ -29,47 +29,51 @@ RSS 증가:  18,048KiB → 274,048KiB
 결과:      MemoryGuard가 프로세스를 자체 종료(137)
 ```
 
-`MEMORY_LIMIT=512`로 변경한 뒤에는 메모리 제한 초과와 `MemoryGuard` 종료가 발생하지 않았습니다.
+**After:** `MEMORY_LIMIT=512`로 변경한 뒤에는 메모리 제한 초과와 `MemoryGuard` 종료가 발생하지 않았습니다.
 
 > **판단:** 이번 종료의 원인은 Linux OOM Killer가 아니라 `MemoryWorker`의 메모리 누적으로 내부 메모리 제한을 초과한 `MemoryGuard`였습니다.
 
-[상세 리포트](reports/01-oom-crash.md) · [증거 요약](evidence/oom/analysis-summary.md)
+[상세 리포트](reports/01-oom-crash.md)
 
 <a id="2-cpu-과점유"></a>
 
 ### 2. CPU 과점유
 
-`CPU_MAX_OCCUPY=80`에서 애플리케이션 내부 `CpuWorker` 값이 상승하다가 `CPU Threshold Violated` 로그와 SIGTERM이 발생했습니다.
+**Before:** `CPU_MAX_OCCUPY=80`에서 애플리케이션 내부 `CpuWorker` 값이 상승하다가 `CPU Threshold Violated` 로그와 SIGTERM이 발생했습니다.
 
 | 측정 대상 | 관찰 결과 |
 | --- | --- |
 | 애플리케이션 내부 값 | `5.00% → 55.11%`로 상승 후 임계치 초과 |
 | Linux `top` | 같은 구간의 최댓값 약 `5%` |
 
-이 실험에서 확인하려는 핵심은 Linux의 실제 CPU 사용률 자체가 아니라, 애플리케이션이 내부 기준을 넘었다고 판단해 보호 종료하는 동작입니다. `MEMORY_LIMIT=512`를 유지하고 `CPU_MAX_OCCUPY`를 `40`으로 낮춘 After 설정에서는 CPU 임계치 초과와 보호 종료가 발생하지 않았습니다.
+이 실험에서 확인하려는 핵심은 Linux의 실제 CPU 사용률 자체가 아니라, 애플리케이션이 내부 기준을 넘었다고 판단해 보호 종료하는 동작입니다.
 
-> **판단:** `CPU_MAX_OCCUPY=80`에서는 애플리케이션 내부 CPU 기준 초과가 재현됐고, `40`으로 낮추자 해당 종료가 사라졌습니다.
+**After:** `MEMORY_LIMIT=512`를 유지하고 `CPU_MAX_OCCUPY`를 `40`으로 낮춘 After 설정에서는 CPU 임계치 초과와 보호 종료가 발생하지 않았습니다.
 
-[상세 리포트](reports/02-cpu-latency.md) · [증거 요약](evidence/cpu/analysis-summary.md)
+> **판단:** 이 장애는 실제 Linux CPU 과점유가 아니라, `CPU_MAX_OCCUPY=80`에서 내부 부하 판정값이 안전 기준을 넘어 발생한 애플리케이션의 보호 종료입니다.
+
+[상세 리포트](reports/02-cpu-latency.md)
 
 <a id="3-deadlock"></a>
 
 ### 3. Deadlock
 
-`MULTI_THREAD_ENABLE=true`에서 두 작업 스레드가 자원을 하나씩 보유한 채 서로가 가진 자원을 기다렸습니다.
+**Before:** `MULTI_THREAD_ENABLE=true`에서 두 작업 스레드가 자원을 하나씩 보유한 채 서로가 가진 자원을 기다렸습니다.
 
 ```text
 스레드 A: Shared_Memory_A 보유 → Socket_Pool_B 대기
 스레드 B: Socket_Pool_B 보유   → Shared_Memory_A 대기
 ```
 
-프로세스 자체는 종료되지 않았지만, 두 스레드가 계속 대기하기 때문에 작업은 완료되지 않았습니다. 실제 관제에서도 스레드들이 `futex_wait_queue`에서 대기하는 상태가 확인됐습니다.
+[애플리케이션 로그](evidence/deadlock/before-20260913-203109-415113757/application-full.log)가 두 작업 스레드의 `WAITING/BLOCKED`에서 멈춘 뒤 약 22초 동안 새 작업 로그와 완료 메시지를 남기지 않아 작업 정체를 감지했습니다. 프로세스 종료 여부를 확인한 결과, 30초 관찰 후에도 [실행 요약](evidence/deadlock/before-20260913-203109-415113757/run-summary.txt)에 `process_alive_after_observation=true`가 기록됐고 [최종 프로세스 상태](evidence/deadlock/before-20260913-203109-415113757/process-final.txt)에도 PID `16535`가 남아 있었습니다. 이어 [스레드 대기 위치](evidence/deadlock/before-20260913-203109-415113757/thread-wait-channels.txt)를 확인하자 스레드들이 `futex_wait_queue`에서 대기 중이었습니다.
 
-After에서는 `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`을 유지하고 `MULTI_THREAD_ENABLE=false`로 변경했습니다. 멀티스레드 동시 처리를 끄자 작업이 서로 자원을 기다리지 않고 순서대로 처리됐으며, 마지막에 `[Scheduler] All tasks completed.`가 기록됐습니다.
+[애플리케이션 로그와 linux 명령어로 Deadlock을 확인한 과정](docs/deadlock-observation-guide.md)
 
-> **판단:** Deadlock은 프로세스 종료가 아니라 스레드 간 자원 대기로 작업이 끝나지 않는 문제입니다.
+**After:** `MEMORY_LIMIT=512`, `CPU_MAX_OCCUPY=40`을 유지하고 `MULTI_THREAD_ENABLE=false`로 변경했습니다. 멀티스레드 동시 처리를 끄자 작업이 서로 자원을 기다리지 않고 순서대로 처리됐으며, 마지막에 `[Scheduler] All tasks completed.`가 기록됐습니다.
 
-[상세 리포트](reports/03-deadlock.md) · [증거 요약](evidence/deadlock/analysis-summary.md)
+> **판단:** PID가 살아 있는데도 두 스레드가 `futex_wait_queue`에서 멈췄으므로, 이 현상은 단순한 처리 지연이 아니라 교차 잠금에 의한 Deadlock으로 판단했습니다.
+
+[상세 리포트](reports/03-deadlock.md)
 
 ## 실행 환경
 
@@ -225,8 +229,8 @@ Linux 셸은 스크립트 이름 뒤에 공백으로 입력한 값을 왼쪽부�
 │   ├── run_deadlock_experiment.sh  # Deadlock Before & After 실험
 │   ├── verify_deadlock_evidence.sh # Deadlock 증거 검증
 │   └── verify_reports.sh           # 리포트와 증거 링크 검증
-├── evidence/                       # 장애별 원본 증거와 분석 요약
-└── reports/                        # GitHub Issue 형식 장애 리포트
+├── evidence/                       # 장애별 로그와 관제 데이터 등 원본 증거
+└── reports/                        # 원본 증거를 분석한 GitHub Issue 형식 상세 리포트
 ```
 
 ## 구현 내용
