@@ -1,2 +1,0 @@
-    PID    PPID ELAPSED STAT %CPU %MEM   RSS    VSZ NLWP COMMAND         COMMAND
-  19548   19543      62 SNl+  0.1  0.4 18048 171576    3 agent-leak-app  /home/byj/agent-leak-lab/bin/agent-leak-app

@@ -1,18 +1,47 @@
 # Linux 시스템 장애 분석
 
-`agent-leak-app`에서 OOM, CPU 보호 종료, Deadlock을 직접 관찰하는 실습입니다.
+`agent-leak-app`에서 OOM Crash, CPU Latency, Deadlock을 직접 관찰하는 실습입니다.
 
-이 저장소는 자동화보다 **명령어와 결과의 관계를 이해하는 것**에 초점을 둡니다. 스크립트는 환경 준비용 `setup.sh`와 CPU·메모리를 기록하는 짧은 `monitor.sh`만 사용합니다. 장애 실행과 원인 판정은 Linux 명령어를 직접 보며 진행합니다.
+스크립트는 환경 준비용 `setup.sh`와 CPU·메모리를 기록하는 짧은 `monitor.sh`만 사용합니다. 장애 실행과 원인 판정은 Linux 명령어를 직접 보며 진행합니다.
 
-## 실습 결과
+## 실습 결과 요약
 
 | 장애 | Before | 바꾼 값 | After |
 | --- | --- | --- | --- |
-| OOM | Heap과 RSS가 증가한 뒤 `MemoryGuard`가 종료 | `MEMORY_LIMIT=256 → 512` | 메모리 제한 초과가 발생하지 않음 |
-| CPU | 내부 부하 값이 상승한 뒤 SIGTERM 종료 | `CPU_MAX_OCCUPY=80 → 40` | CPU 보호 종료가 발생하지 않음 |
+| OOM Crash | Heap과 RSS가 증가한 뒤 `MemoryGuard`가 종료 | `MEMORY_LIMIT=256 → 512` | 메모리 제한 초과가 발생하지 않음 |
+| CPU Latency | 내부 부하 값이 상승한 뒤 SIGTERM 종료 | `CPU_MAX_OCCUPY=80 → 40` | CPU 보호 종료가 발생하지 않음 |
 | Deadlock | PID는 살아 있지만 두 스레드가 서로 대기 | `MULTI_THREAD_ENABLE=true → false` | 작업이 순서대로 완료됨 |
 
-자세한 분석은 [OOM](reports/01-oom-crash.md), [CPU](reports/02-cpu-latency.md), [Deadlock](reports/03-deadlock.md) 리포트에서 확인할 수 있습니다.
+## 실행 환경
+
+- 운영체제: Linux 또는 WSL
+- 셸: Bash
+- 지원 CPU: x86_64/amd64, arm64/aarch64
+- 필수 패키지: `unzip`, `procps`, `iproute2`
+- 실행 계정: root가 아닌 일반 사용자
+- 권장 환경: 로컬 PC 또는 Docker·WSL 같은 격리 환경
+
+`setup.sh`가 CPU 아키텍처를 확인한 뒤 `agent-app-leak.zip`에서 알맞은 실행 파일을 선택합니다.
+
+## 환경변수
+
+| 변수 | 실습 범위 | 의미 |
+| --- | --- | --- |
+| `MEMORY_LIMIT` | 50~512 | 애플리케이션 메모리 제한(MB) |
+| `CPU_MAX_OCCUPY` | 10~100 | 애플리케이션 내부 CPU 설정 |
+| `MULTI_THREAD_ENABLE` | `true` 또는 `false` | 멀티스레드 작업 사용 여부 |
+
+경로와 포트는 `setup.sh`가 만든 `agent.env`에서 설정합니다. 실험할 때는 위 세 변수만 바꿉니다.
+
+## 제약 사항
+
+- 애플리케이션은 `0.0.0.0:15034`를 사용하므로 해당 포트가 비어 있어야 합니다.
+- 기본 작업 경로는 `$HOME/agent-leak-lab`이며 현재 사용자가 디렉터리를 만들고 쓸 수 있어야 합니다.
+- OOM 실험은 실제 메모리를 최대 수백 MB까지 사용합니다. 다른 중요한 작업이 없는 환경에서 실행합니다.
+- 실험이 끝난 뒤 `agent-leak-app` 프로세스가 남아 있으면 다음 실험의 포트 사용과 PID 확인에 영향을 줍니다.
+- 공유 네트워크에서는 방화벽과 포트 노출 여부를 확인합니다.
+- 제공된 바이너리를 디컴파일하거나 리버스 엔지니어링하지 않습니다.
+
 
 ## 1. 준비
 
@@ -100,6 +129,8 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 
 같은 방법으로 50회 이상 관찰해 Before 종료 시점을 넘겨도 살아 있는지 확인합니다. 이 설정은 누수 코드를 고친 것이 아니라 메모리 보호 종료를 늦춘 우회 조치입니다.
 
+> 자세한 분석은 [reports/01-oom-crash.md](reports/01-oom-crash.md) 에서 확인할 수 있습니다.
+
 ## 4. CPU 관찰
 
 OOM과 Deadlock이 섞이지 않도록 두 실행 모두 `MEMORY_LIMIT=512`, `MULTI_THREAD_ENABLE=false`를 사용합니다.
@@ -131,6 +162,8 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 ```
 
 `CPU Threshold Violated` 없이 Before 종료 시점을 넘겨 50회 관찰이 완료되는지 확인합니다.
+
+> 자세한 분석은 [reports/02-cpu-latency.md](reports/02-cpu-latency.md) 에서 확인할 수 있습니다.
 
 ## 5. Deadlock 관찰
 
@@ -171,6 +204,8 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 
 상호 `WAITING/BLOCKED`가 사라지고 `[Scheduler] All tasks completed.`가 출력되는지 확인합니다.
 
+> 자세한 분석은 [reports/03-deadlock.md](reports/03-deadlock.md) 에서 확인할 수 있습니다.
+
 ## 6. 결과를 읽는 순서
 
 한꺼번에 모든 파일을 볼 필요는 없습니다. 장애마다 다음 순서만 지킵니다.
@@ -182,16 +217,6 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 
 저장소의 `evidence/`는 이미 수행한 실험의 원본 기록입니다. 처음에는 [증거 읽기 안내](evidence/README.md)에 표시된 핵심 파일만 보면 됩니다.
 
-## 환경변수
-
-| 변수 | 실습 범위 | 의미 |
-| --- | --- | --- |
-| `MEMORY_LIMIT` | 50~512 | 애플리케이션 메모리 제한(MB) |
-| `CPU_MAX_OCCUPY` | 10~100 | 애플리케이션 내부 CPU 설정 |
-| `MULTI_THREAD_ENABLE` | `true` 또는 `false` | 멀티스레드 작업 사용 여부 |
-
-경로와 포트는 `setup.sh`가 만든 `agent.env`에서 설정합니다. 실험할 때는 위 세 변수만 바꿉니다.
-
 ## 프로젝트 구조
 
 ```text
@@ -201,9 +226,7 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
 │   ├── setup.sh             # 최초 한 번 실행하는 환경 준비 스크립트
 │   └── monitor.sh           # PID의 CPU·메모리를 1초마다 기록
 ├── evidence/                # 실험의 원본 로그와 Linux 관찰 결과
-├── reports/                 # 장애별 분석 리포트 3건
-└── docs/
-    └── deadlock-observation-guide.md
+└── reports/                 # 장애별 분석 리포트 3건
 ```
 
 문제가 생기면 자동 검증 스크립트를 찾기보다 먼저 앱 로그의 마지막 줄, `pgrep -af agent-leak-app`, 그리고 해당 장애의 Linux 관찰 명령을 차례로 확인합니다.

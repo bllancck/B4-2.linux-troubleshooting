@@ -1,4 +1,0 @@
-    PID     LWP PSR STAT WCHAN                            %CPU %MEM COMMAND
-  16535   16535   6 SNl+ futex_wait_queue                  0.4  0.4 agent-leak-app
-  16535   16601   1 SNl+ futex_wait_queue                  0.0  0.4 agent-leak-app
-  16535   16602   5 SNl+ futex_wait_queue                  0.0  0.4 agent-leak-app

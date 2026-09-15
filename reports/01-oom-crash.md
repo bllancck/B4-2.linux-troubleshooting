@@ -22,7 +22,7 @@ PID="$(pgrep -n -x agent-leak-app)"
 bash scripts/monitor.sh "$PID" 60 oom-before-monitor.log
 ```
 
-[애플리케이션 로그](../evidence/final/oom-before/application.log)에는 Heap 증가와 종료 원인이 이어서 기록됐습니다.
+[애플리케이션 로그](../evidence/oom-before/application.log)에는 Heap 증가와 종료 원인이 이어서 기록됐습니다.
 
 ```text
 [MemoryWorker] Current Heap: 225MB
@@ -32,7 +32,7 @@ bash scripts/monitor.sh "$PID" 60 oom-before-monitor.log
 [MemoryGuard] Self-terminating process ...
 ```
 
-[`monitor.sh` 결과](../evidence/final/oom-before/monitor.log)에서 RSS는 `17,920KiB`에서 `273,920KiB`까지 증가한 뒤 `PROCESS_EXITED`가 기록됐습니다. 앱 내부 Heap 증가가 실제 프로세스 메모리 증가로 이어진 증거입니다.
+[`monitor.sh` 결과](../evidence/oom-before/monitor.log)에서 RSS는 `17,920KiB`에서 `273,920KiB`까지 증가한 뒤 `PROCESS_EXITED`가 기록됐습니다. 앱 내부 Heap 증가가 실제 프로세스 메모리 증가로 이어진 증거입니다.
 
 ## 3. Root Cause Analysis (원인 분석)
 
@@ -54,6 +54,6 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
   "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/oom-after.log"
 ```
 
-[After `monitor.sh` 결과](../evidence/final/oom-after/monitor.log)에서는 RSS가 `17,920KiB`에서 `453,248KiB`까지 증가했지만 관찰 종료까지 프로세스가 살아 있었습니다. [실행 결과](../evidence/final/oom-after/result.txt)의 `stopped_by_observer=true`는 장애 종료가 아니라 관찰자가 실험을 마치고 종료했다는 뜻입니다.
+[After `monitor.sh` 결과](../evidence/oom-after/monitor.log)에서는 RSS가 `17,920KiB`에서 `453,248KiB`까지 증가했지만 관찰 종료까지 프로세스가 살아 있었습니다. [실행 결과](../evidence/oom-after/result.txt)의 `stopped_by_observer=true`는 장애 종료가 아니라 관찰자가 실험을 마치고 종료했다는 뜻입니다.
 
 제한을 높인 것은 메모리 누수를 고친 것이 아닙니다. 소스 코드를 수정할 수 있다면 불필요한 객체를 해제하고 캐시나 큐의 크기에 상한을 둬야 합니다.

@@ -22,7 +22,7 @@ ps -p "$PID" -o pid,stat,%cpu,%mem,rss,etime,comm
 ps -L -p "$PID" -o pid,lwp,stat,wchan:32,%cpu,%mem,rss,comm
 ```
 
-[애플리케이션 로그](../evidence/final/deadlock-before/application.log)에서 자원 보유와 교차 대기 관계를 확인했습니다.
+[애플리케이션 로그](../evidence/deadlock-before/application.log)에서 자원 보유와 교차 대기 관계를 확인했습니다.
 
 ```text
 Worker-Thread-1: LOCK ACQUIRED [Shared_Memory_A]
@@ -31,9 +31,9 @@ Worker-Thread-1: WAITING for [Socket_Pool_B] (Status: BLOCKED)
 Worker-Thread-2: WAITING for [Shared_Memory_A] (Status: BLOCKED)
 ```
 
-[`monitor.sh` 결과](../evidence/final/deadlock-before/monitor.log)는 CPU가 `7.3%`에서 `0.6%`로 낮아지는 동안 RSS가 `17,792KiB`로 고정됐고, 20회 관찰 후에도 `PROCESS_EXITED`가 없음을 보여줍니다. [최종 프로세스 상태](../evidence/final/deadlock-before/process-final.txt)에도 PID가 남아 있습니다.
+[`monitor.sh` 결과](../evidence/deadlock-before/monitor.log)는 CPU가 `7.3%`에서 `0.6%`로 낮아지는 동안 RSS가 `17,792KiB`로 고정됐고, 20회 관찰 후에도 `PROCESS_EXITED`가 없음을 보여줍니다. [최종 프로세스 상태](../evidence/deadlock-before/process-final.txt)에도 PID가 남아 있습니다.
 
-[스레드 대기 위치](../evidence/final/deadlock-before/threads-final.txt)에서는 세 스레드 모두 `futex_wait_queue`에서 기다리고 있었습니다.
+[스레드 대기 위치](../evidence/deadlock-before/threads-final.txt)에서는 세 스레드 모두 `futex_wait_queue`에서 기다리고 있었습니다.
 
 ## 3. Root Cause Analysis (원인 분석)
 
@@ -56,6 +56,6 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
   "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/deadlock-after.log"
 ```
 
-[After 앱 로그](../evidence/final/deadlock-after/application.log)에는 상호 `WAITING/BLOCKED`가 없고 `[Scheduler] All tasks completed.`가 기록됐습니다. [After 스레드 상태](../evidence/final/deadlock-after/threads-final.txt)의 보조 스레드는 `do_select` 또는 실행 상태이며 교차 자원 대기 관계가 없습니다.
+[After 앱 로그](../evidence/deadlock-after/application.log)에는 상호 `WAITING/BLOCKED`가 없고 `[Scheduler] All tasks completed.`가 기록됐습니다. [After 스레드 상태](../evidence/deadlock-after/threads-final.txt)의 보조 스레드는 `do_select` 또는 실행 상태이며 교차 자원 대기 관계가 없습니다.
 
 멀티스레드를 끄는 것은 우회 조치입니다. 소스 코드를 수정할 수 있다면 모든 스레드가 자원을 같은 순서로 획득하게 하고, 락 타임아웃과 실패 시 해제 처리를 추가해야 합니다.

@@ -21,7 +21,7 @@ bash scripts/monitor.sh "$PID" 60 cpu-before-monitor.log
 top -p "$PID"
 ```
 
-[애플리케이션 로그](../evidence/final/cpu-before/application.log)의 내부 부하 값은 `5.00%`에서 `53.32%`까지 상승했습니다.
+[애플리케이션 로그](../evidence/cpu-before/application.log)의 내부 부하 값은 `5.00%`에서 `53.32%`까지 상승했습니다.
 
 ```text
 [CpuWorker] Current Load: 42.48%
@@ -30,7 +30,7 @@ top -p "$PID"
 [CpuWorker] CPU Threshold Violated! (53.32%).
 ```
 
-[`monitor.sh` 결과](../evidence/final/cpu-before/monitor.log)에는 같은 프로세스가 사라진 `PROCESS_EXITED`가 기록됐고, [실행 결과](../evidence/final/cpu-before/result.txt)의 종료 코드는 `143`입니다. Linux에서 `128 + 15 = 143`이므로 SIGTERM 종료입니다.
+[`monitor.sh` 결과](../evidence/cpu-before/monitor.log)에는 같은 프로세스가 사라진 `PROCESS_EXITED`가 기록됐고, [실행 결과](../evidence/cpu-before/result.txt)의 종료 코드는 `143`입니다. Linux에서 `128 + 15 = 143`이므로 SIGTERM 종료입니다.
 
 다만 Linux가 측정한 `%CPU`는 약 `8.0%`에서 낮아졌으며 앱 내부값처럼 급상승하지 않았습니다. 제공 바이너리의 `Current Load`는 실제 OS CPU 사용률이 아니라 장애 재현을 위한 내부 판정값입니다. 이 차이를 실제 CPU 53% 사용으로 과장하지 않았습니다.
 
@@ -52,6 +52,6 @@ MEMORY_LIMIT=512 CPU_MAX_OCCUPY=40 MULTI_THREAD_ENABLE=false \
   "$AGENT_BINARY" 2>&1 | tee "$AGENT_LOG_DIR/cpu-after.log"
 ```
 
-[After 앱 로그](../evidence/final/cpu-after/application.log)에는 `CPU Threshold Violated`가 없고, [After 실행 결과](../evidence/final/cpu-after/result.txt)에는 `stopped_by_observer=true`가 기록됐습니다. 즉, CPU 보호 정책이 종료한 것이 아니라 50회 관찰을 마친 뒤 실험자가 종료했습니다.
+[After 앱 로그](../evidence/cpu-after/application.log)에는 `CPU Threshold Violated`가 없고, [After 실행 결과](../evidence/cpu-after/result.txt)에는 `stopped_by_observer=true`가 기록됐습니다. 즉, CPU 보호 정책이 종료한 것이 아니라 50회 관찰을 마친 뒤 실험자가 종료했습니다.
 
 이 조치는 실제 서버의 CPU 성능을 개선한 것이 아닙니다. 소스 코드를 수정할 수 있다면 내부 부하 계산 방식과 임계치 로직을 실제 OS 지표와 대조해야 합니다.

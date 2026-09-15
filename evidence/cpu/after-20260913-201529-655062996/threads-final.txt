@@ -1,4 +1,0 @@
-    PID     LWP PSR STAT %CPU %MEM COMMAND
-  15678   15678   5 SNl+  0.1  0.4 agent-leak-app
-  15678   15744   3 SNl+  0.0  0.4 agent-leak-app
-  15678   15745   6 SNl+  0.0  0.4 agent-leak-app

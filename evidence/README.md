@@ -1,6 +1,6 @@
 # 증거 파일 읽는 법
 
-최종 리포트는 `final/` 아래의 새 실험 결과를 사용합니다. 장애마다 다음 순서로 필요한 파일만 확인합니다.
+최종 리포트는 이 폴더 아래의 실험 결과를 사용합니다. 장애마다 다음 순서로 필요한 파일만 확인합니다.
 
 1. `settings.txt`: Before와 After에서 바꾼 환경변수
 2. `application.log`: 애플리케이션이 기록한 장애 현상과 종료 이유
@@ -9,7 +9,7 @@
 5. `result.txt`: 종료 코드와 관찰자 종료 여부
 
 ```text
-final/
+evidence/
 ├── oom-before/
 ├── oom-after/
 ├── cpu-before/
@@ -17,8 +17,6 @@ final/
 ├── deadlock-before/
 └── deadlock-after/
 ```
-
-기존의 타임스탬프 폴더들은 재편 전 자동 수집 결과입니다. 과거 기록을 보존한 것이며 최종 판단에는 `final/` 결과만 사용합니다.
 
 앱 로그와 Linux 관찰값은 역할이 다릅니다.
 

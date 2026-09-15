@@ -1,8 +1,0 @@
-top - 20:32:13 up  6:22,  1 user,  load average: 0.00, 0.00, 0.00
-Tasks:   1 total,   0 running,   1 sleeping,   0 stopped,   0 zombie
-%Cpu(s):  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
-MiB Mem :   3832.2 total,   3204.1 free,    549.0 used,    228.3 buff/cache     
-MiB Swap:   1024.0 total,   1024.0 free,      0.0 used.   3283.2 avail Mem 
-
-    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
-  16830 byj       30  10   23080  18048   9728 S   0.0   0.5   0:00.11 agent-leak-app

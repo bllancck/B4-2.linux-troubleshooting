@@ -1,2 +1,0 @@
-    PID     LWP PSR STAT WCHAN                            %CPU %MEM COMMAND
-  16830   16830   6 SN+  do_select                        12.3  0.4 agent-leak-app
